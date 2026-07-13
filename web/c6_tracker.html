@@ -1,0 +1,2329 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>C6 Tracker</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    :root {
+      --bg: #050706;
+      --panel: #0a0d0b;
+      --line: #244834;
+      --white: #f5f5f7;
+      --muted: #aeb1b8;
+      --green: #43d13e;
+      --yellow: #f1d20a;
+      --blue: #58a6ff;
+      --red: #ff3038;
+      --shadow: 0 18px 60px rgba(0, 0, 0, .45);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: max(16px, env(safe-area-inset-top)) 14px max(24px, env(safe-area-inset-bottom));
+      color: var(--white);
+      background:
+        radial-gradient(circle at 50% -10%, rgba(67, 209, 62, .10), transparent 34rem),
+        #020302;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button, input { font: inherit; }
+    button { touch-action: manipulation; }
+
+    .app {
+      width: min(100%, 720px);
+      margin: 0 auto;
+    }
+
+    .app-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .title-wrap { min-width: 0; }
+    h1 { margin: 0; font-size: 22px; letter-spacing: .08em; text-transform: uppercase; }
+    .connection-text { margin-top: 4px; color: var(--muted); font-size: 13px; }
+
+    .connect-button {
+      flex: 0 0 auto;
+      min-height: 44px;
+      padding: 0 18px;
+      border: 1px solid var(--green);
+      border-radius: 10px;
+      color: #051005;
+      background: var(--green);
+      font-weight: 800;
+    }
+
+    .connect-button.connected {
+      border-color: #56605a;
+      color: var(--white);
+      background: #171b18;
+    }
+
+    .connect-button:disabled { opacity: .45; }
+    .tab-nav { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+    .tab-button { min-height: 44px; border: 1px solid #303631; border-radius: 10px; color: var(--muted); background: #0a0d0b; font-weight: 800; }
+    .tab-button.active { border-color: var(--blue); color: #dbeeff; background: rgba(88,166,255,.14); }
+    .tab-page[hidden] { display: none; }
+
+    .device-screen {
+      overflow: hidden;
+      border: 1px solid #252a27;
+      border-radius: 16px;
+      background: linear-gradient(180deg, #030504, #000);
+      box-shadow: var(--shadow), inset 0 0 0 5px #090b0a;
+    }
+
+    .status-strip {
+      display: grid;
+      grid-template-columns: repeat(3, auto) 1fr;
+      gap: 16px;
+      align-items: center;
+      min-height: 52px;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      font: 700 14px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+      letter-spacing: .04em;
+    }
+
+    .lamp { display: inline-flex; align-items: center; gap: 7px; }
+    .lamp::before {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #424743;
+      content: "";
+      box-shadow: 0 0 0 2px rgba(255,255,255,.03);
+    }
+    .lamp.on::before { background: var(--green); box-shadow: 0 0 12px rgba(67,209,62,.65); }
+    .lamp.rec.on::before { background: var(--red); box-shadow: 0 0 12px rgba(255,48,56,.65); }
+    .lamp.error::before { background: var(--red); box-shadow: 0 0 12px rgba(255,48,56,.65); }
+
+    .battery-small { justify-self: end; color: var(--yellow); }
+    .battery-small strong { margin-left: 6px; color: var(--white); font-size: 18px; }
+
+    .distance-block {
+      padding: 24px 18px 20px;
+      text-align: center;
+    }
+
+    .distance-value {
+      font: 800 clamp(58px, 17vw, 104px)/.94 ui-monospace, SFMono-Regular, Consolas, monospace;
+      letter-spacing: -.08em;
+      text-shadow: 0 2px 16px rgba(255,255,255,.12);
+    }
+
+    .distance-value span {
+      margin-left: .12em;
+      color: var(--muted);
+      font-size: .36em;
+      letter-spacing: .02em;
+    }
+
+    .distance-caption { margin-top: 10px; color: var(--muted); letter-spacing: .18em; text-transform: uppercase; }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      border-top: 1px solid var(--line);
+    }
+
+    .metric {
+      min-width: 0;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .metric:nth-child(odd) { border-right: 1px solid var(--line); }
+    .metric-label { color: var(--muted); font: 700 12px/1 ui-monospace, monospace; letter-spacing: .12em; }
+    .metric-value { margin-top: 8px; font: 700 25px/1.05 ui-monospace, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .metric-value.green { color: var(--green); }
+    .metric-value.blue { color: var(--blue); }
+    .metric-value.yellow { color: var(--yellow); }
+    .metric-value small { color: var(--muted); font-size: .55em; }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1.35fr 1fr 1fr;
+      gap: 10px;
+      margin: 14px 0;
+    }
+
+    .action {
+      min-height: 50px;
+      border: 1px solid #303631;
+      border-radius: 12px;
+      color: var(--white);
+      background: #111512;
+      font-weight: 800;
+    }
+
+    .action.primary { border-color: var(--green); background: rgba(67,209,62,.15); color: #75ee70; }
+    .action.stop { border-color: var(--red); background: rgba(255,48,56,.13); color: #ff777d; }
+    .action:disabled { opacity: .38; }
+
+    .tracks-panel[hidden] { display: none; }
+    .tracks-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .map-follow-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 12px; border: 1px solid #303631; border-radius: 9px; color: var(--white); background: #070a08; font-weight: 700; }
+    .map-follow-toggle input { width: 19px; height: 19px; margin: 0; accent-color: var(--blue); }
+    .tracks-toolbar button { min-height: 42px; padding: 0 14px; }
+    .track-list { display: grid; gap: 8px; max-height: 240px; overflow: auto; }
+    .track-list-item {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      padding: 10px 12px; border: 1px solid #303631; border-radius: 9px; background: #070a08;
+    }
+    .track-list-item button { min-height: 38px; padding: 0 14px; }
+    .track-list-meta { color: var(--muted); font: 12px/1.4 ui-monospace, monospace; }
+    .map-status { margin: 10px 0; color: var(--muted); font: 12px/1.4 ui-monospace, monospace; }
+    .track-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+    .track-stat { min-width: 0; padding: 10px; border: 1px solid #273129; border-radius: 8px; background: #060806; }
+    .track-stat span { display: block; color: var(--muted); font-size: 10px; text-transform: uppercase; }
+    .track-stat strong { display: block; margin-top: 5px; font: 700 15px ui-monospace, monospace; overflow-wrap: anywhere; }
+    .cycle-status { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    #trackMap { height: min(62vh, 520px); min-height: 360px; border-radius: 11px; background: #111; }
+    .map-shell:fullscreen { width: 100vw; height: 100vh; padding: 10px; background: #050706; }
+    .map-shell:fullscreen #trackMap { height: calc(100vh - 66px); min-height: 0; }
+    .map-shell:fullscreen .map-status { position: absolute; z-index: 1001; left: 16px; bottom: 14px; margin: 0; padding: 7px 10px; border-radius: 7px; color: #fff; background: rgba(0,0,0,.72); }
+    .leaflet-container { font-family: inherit; }
+    .fullscreen-map-button { position: absolute; z-index: 1002; top: 12px; right: 12px; min-height: 40px; padding: 0 12px; border: 1px solid var(--blue); border-radius: 8px; color: #fff; background: rgba(5,7,6,.86); font-weight: 800; }
+    .map-shell { position: relative; }
+    .compact-controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+    .compact-controls select, .compact-controls input[type=file] { min-height: 42px; max-width: 100%; padding: 8px; border: 1px solid #303631; border-radius: 9px; color: var(--white); background: #070a08; }
+    .detail-panel, .journal-list { white-space: pre-wrap; color: var(--muted); font: 12px/1.55 ui-monospace, monospace; }
+    .journal-list { max-height: 54vh; overflow: auto; }
+    .profile-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .profile-row select { flex: 1 1 180px; min-height: 44px; padding: 8px; color: var(--white); background: #070a08; border: 1px solid #303631; border-radius: 9px; }
+    .route-counters { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; margin-top: 10px; }
+
+    .card {
+      margin-top: 14px;
+      padding: 16px;
+      border: 1px solid #252a27;
+      border-radius: 14px;
+      background: var(--panel);
+    }
+
+    .history-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 14px;
+    }
+
+    .history-grid .card { min-width: 0; margin-top: 0; }
+
+    .chart-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .chart-header h2 { margin: 0; }
+    .chart-count { color: var(--green); font: 700 12px/1 ui-monospace, monospace; }
+
+    .chart-surface {
+      overflow: hidden;
+      border: 1px solid #243027;
+      border-radius: 10px;
+      background: #020403;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 230px;
+    }
+
+    .chart-meta {
+      min-height: 18px;
+      margin-top: 9px;
+      color: var(--muted);
+      font: 11px/1.45 ui-monospace, monospace;
+    }
+
+    .card h2 { margin: 0 0 14px; font-size: 16px; letter-spacing: .08em; text-transform: uppercase; }
+    .settings-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    label { color: var(--muted); font-size: 12px; }
+    input {
+      width: 100%;
+      height: 44px;
+      margin-top: 6px;
+      padding: 0 10px;
+      border: 1px solid #343b36;
+      border-radius: 9px;
+      outline: none;
+      color: var(--white);
+      background: #050706;
+    }
+    input:focus { border-color: var(--green); }
+    .toggle-setting {
+      min-height: 44px;
+      margin-top: 18px;
+      padding: 0 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid #343b36;
+      border-radius: 9px;
+      background: #050706;
+    }
+    .toggle-setting input {
+      width: 20px;
+      height: 20px;
+      margin: 0;
+      accent-color: var(--green);
+    }
+
+    .save-settings {
+      width: 100%;
+      min-height: 46px;
+      margin-top: 12px;
+      border: 1px solid var(--blue);
+      border-radius: 10px;
+      color: #dbeeff;
+      background: rgba(88,166,255,.13);
+      font-weight: 800;
+    }
+    .save-settings.pending { border-color: var(--yellow); color: var(--yellow); background: rgba(241,210,10,.1); }
+
+    .log {
+      min-height: 22px;
+      margin: 14px 2px 0;
+      color: var(--muted);
+      font: 13px/1.45 ui-monospace, monospace;
+    }
+    .log.error { color: #ff777d; }
+    .log.ok { color: #75ee70; }
+    .queue-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .queue-state { flex: 1 1 220px; color: var(--muted); font: 12px/1.5 ui-monospace, monospace; }
+    .queue-state strong { color: var(--white); }
+
+    @media (max-width: 520px) {
+      .tab-nav { grid-template-columns: repeat(2, 1fr); }
+      .status-strip { gap: 9px; padding-inline: 12px; font-size: 12px; }
+      .distance-block { padding-inline: 8px; }
+      .metric { padding: 14px 12px; }
+      .metric-value { font-size: 21px; }
+      .actions { grid-template-columns: 1fr 1fr; }
+      .actions .primary { grid-column: 1 / -1; }
+      .settings-grid { grid-template-columns: 1fr; }
+      .track-stats { grid-template-columns: repeat(2, 1fr); }
+      .route-counters { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 680px) {
+      .history-grid { grid-template-columns: 1fr; }
+      canvas { height: 220px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="app-header">
+      <div class="title-wrap">
+        <h1>C6 Tracker</h1>
+        <div id="connectionText" class="connection-text">Bluetooth не подключён</div>
+      </div>
+      <button id="connectButton" class="connect-button" type="button">Подключить</button>
+    </header>
+
+    <nav class="tab-nav" aria-label="Разделы">
+      <button id="telemetryTabButton" class="tab-button active" type="button">Телеметрия</button>
+      <button id="mapTabButton" class="tab-button" type="button">Карта</button>
+      <button id="journalTabButton" class="tab-button" type="button">Журнал</button>
+      <button id="dataTabButton" class="tab-button" type="button">Данные</button>
+    </nav>
+
+    <div id="telemetryTab" class="tab-page">
+
+    <section class="card">
+      <div class="chart-header"><h2>Состояние цикла</h2><span id="cycleState" class="chart-count">—</span></div>
+      <div class="cycle-status">
+        <div class="track-stat"><span>Пробуждение</span><strong id="wakeReason">—</strong></div>
+        <div class="track-stat"><span>GPS-точки</span><strong id="cyclePoints">0 / 0</strong></div>
+        <div class="track-stat"><span>GPS-таймаут</span><strong id="cycleGpsTime">0 / 0 с</strong></div>
+        <div class="track-stat"><span>Следующий сон</span><strong id="cycleSleep">—</strong></div>
+        <div class="track-stat"><span>SD-карта</span><strong id="sdHealth">—</strong></div>
+        <div class="track-stat"><span>USB / цикл</span><strong id="usbCycle">—</strong></div>
+      </div>
+    </section>
+
+    <section class="device-screen" aria-label="Телеметрия трекера">
+      <div class="status-strip">
+        <span id="gpsLamp" class="lamp">GPS</span>
+        <span id="recLamp" class="lamp rec">REC</span>
+        <span id="sdLamp" class="lamp">SD</span>
+        <span class="battery-small">BAT <strong id="batteryTop">--%</strong></span>
+      </div>
+
+      <div class="distance-block">
+        <div id="distance" class="distance-value">0.00<span>км</span></div>
+        <div class="distance-caption">пройдено</div>
+      </div>
+
+      <div class="metrics">
+        <div class="metric"><div class="metric-label">СКОРОСТЬ</div><div id="speed" class="metric-value blue">-- <small>км/ч</small></div></div>
+        <div class="metric"><div class="metric-label">ВЫСОТА</div><div id="altitude" class="metric-value green">--- <small>м</small></div></div>
+        <div class="metric"><div class="metric-label">НАБОР</div><div id="deltaAltitude" class="metric-value green">--- <small>м</small></div></div>
+        <div class="metric"><div class="metric-label">ВРЕМЯ ЗАПИСИ</div><div id="logTime" class="metric-value">00:00:00</div></div>
+        <div class="metric"><div class="metric-label">СПУТНИКИ / HDOP</div><div id="satellites" class="metric-value">0 / --</div></div>
+        <div class="metric"><div class="metric-label">ТРЕК / ТОЧКИ</div><div id="route" class="metric-value yellow">001 / 0</div></div>
+        <div class="metric"><div class="metric-label">ШИРОТА</div><div id="latitude" class="metric-value">—</div></div>
+        <div class="metric"><div class="metric-label">ДОЛГОТА</div><div id="longitude" class="metric-value">—</div></div>
+      </div>
+    </section>
+
+    <section class="actions" aria-label="Управление записью">
+      <button id="recordButton" class="action primary" type="button" disabled>Старт записи</button>
+      <button id="markButton" class="action" type="button">Поставить точку</button>
+      <button id="newButton" class="action" type="button" disabled>Новый трек</button>
+      <button id="tracksButton" class="action" type="button" disabled>Все треки</button>
+    </section>
+
+    <section class="card">
+      <div class="chart-header"><h2>Очередь действий</h2><span id="queueBadge" class="chart-count">пусто</span></div>
+      <div class="queue-actions">
+        <div id="queueState" class="queue-state">Нет отложенных действий.</div>
+        <button id="clearPendingSettings" class="action" type="button">Отменить настройки</button>
+        <button id="clearPendingMarks" class="action" type="button">Отменить точки</button>
+      </div>
+    </section>
+
+    <section class="history-grid" aria-label="История трека и батареи">
+      <article class="card">
+        <div class="chart-header">
+          <h2>Последние точки трека</h2>
+          <span id="trackCount" class="chart-count">0 / 100</span>
+        </div>
+        <div class="chart-surface"><canvas id="trackCanvas"></canvas></div>
+        <div id="trackBounds" class="chart-meta">История ещё не загружена</div>
+      </article>
+
+      <article class="card">
+        <div class="chart-header">
+          <h2>График батареи</h2>
+          <span id="batteryCount" class="chart-count">0 / 1000</span>
+        </div>
+        <div class="chart-surface"><canvas id="batteryCanvas"></canvas></div>
+        <div id="batteryRange" class="chart-meta">История ещё не загружена</div>
+      </article>
+    </section>
+
+    <section class="card">
+      <h2>Настройки GPS и сна</h2>
+      <div class="profile-row">
+        <select id="profileSelect" aria-label="Профиль режима"></select>
+        <button id="applyProfileButton" class="action" type="button">Применить профиль</button>
+        <button id="saveProfileButton" class="action" type="button">Сохранить свой</button>
+        <button id="deleteProfileButton" class="action" type="button">Удалить свой</button>
+      </div>
+      <form id="settingsForm">
+        <div class="settings-grid">
+          <label>Таймаут фикса, с<input id="gpsTimeout" type="number" min="30" max="3600" step="1" value="120"></label>
+          <label>Мин. спутников<input id="minSatellites" type="number" min="1" max="20" step="1" value="4"></label>
+          <label>Макс. HDOP<input id="maxHdop" type="number" min="0.5" max="20" step="0.1" value="5.0"></label>
+          <label>Спать, с<input id="sleepTime" type="number" min="10" max="86400" step="1" value="60"></label>
+          <label>Мин. точек перед сном<input id="minPoints" type="number" min="1" max="100" step="1" value="1"></label>
+          <label class="toggle-setting"><input id="screenEnabled" type="checkbox" checked>Включать экран</label>
+          <label class="toggle-setting"><input id="bleEnabled" type="checkbox" checked>Включать Bluetooth</label>
+          <label class="toggle-setting"><input id="filterEnabled" type="checkbox">Фильтровать GPS-точки</label>
+          <label class="toggle-setting"><input id="sleepWhileBle" type="checkbox">Засыпать при подключённом Bluetooth</label>
+          <label class="toggle-setting"><input id="autoReconnect" type="checkbox" checked>Автоподключение</label>
+        </div>
+        <button id="saveSettings" class="save-settings" type="submit">Отправить по пробуждении</button>
+      </form>
+    </section>
+    </div>
+
+    <div id="mapTab" class="tab-page" hidden>
+      <section id="tracksPanel" class="card tracks-panel">
+        <div class="chart-header"><h2>Треки на карте памяти</h2><span id="mapTrackTitle" class="chart-count"></span></div>
+        <div class="tracks-toolbar">
+          <button id="refreshTracksButton" class="action" type="button">Обновить список</button>
+          <button id="cancelTrackLoadButton" class="action" type="button">Отмена загрузки</button>
+          <button id="downloadTrackButton" class="action" type="button" disabled>Скачать трек</button>
+          <button id="downloadGpxButton" class="action" type="button" disabled>Скачать GPX</button>
+          <label class="map-follow-toggle"><input id="followCoordinates" type="checkbox">Отслеживать координаты</label>
+        </div>
+        <div class="compact-controls">
+          <select id="baseMapSelect" aria-label="Подложка карты">
+            <option value="positron">Positron</option><option value="dark">Dark Matter</option>
+            <option value="osm">OpenStreetMap</option><option value="satellite">Спутник</option>
+            <option value="transport">Транспорт</option><option value="cyclosm">CyclOSM</option>
+          </select>
+          <label class="map-follow-toggle"><input id="showTrackLine" type="checkbox" checked>Линия</label>
+          <label class="map-follow-toggle"><input id="showTrackPoints" type="checkbox" checked>Точки</label>
+          <label class="map-follow-toggle"><input id="showTrackMarks" type="checkbox" checked>Метки</label>
+          <label class="map-follow-toggle"><input id="showBadHdop" type="checkbox" checked>Плохой HDOP</label>
+        </div>
+        <div class="compact-controls">
+          <input id="routeImportFile" type="file" accept=".gpx,.geojson,.json,application/gpx+xml,application/geo+json">
+          <button id="clearRouteButton" class="action" type="button">Убрать маршрут</button>
+          <button id="resetPeriodButton" class="action" type="button">Сбросить период</button>
+        </div>
+        <div class="route-counters">
+          <div class="track-stat"><span>От начала маршрута</span><strong id="routeFromStart">—</strong></div>
+          <div class="track-stat"><span>За период</span><strong id="routePeriod">0.00 км · 00:00:00</strong></div>
+          <div class="track-stat"><span>До конца маршрута</span><strong id="routeToEnd">—</strong></div>
+        </div>
+        <div id="trackList" class="track-list"></div>
+        <div id="sdSpace" class="map-status"></div>
+        <div id="mapShell" class="map-shell">
+          <button id="fullscreenMapButton" class="fullscreen-map-button" type="button">На весь экран</button>
+          <div id="mapStatus" class="map-status">Выберите трек.</div>
+          <div id="trackMap"></div>
+        </div>
+        <div id="trackStats" class="track-stats"></div>
+        <div id="pointDetails" class="card detail-panel">Нажмите на точку, чтобы увидеть её данные. Две выбранные точки включают измерение расстояния.</div>
+      </section>
+    </div>
+
+    <div id="journalTab" class="tab-page" hidden>
+      <section class="card">
+        <div class="chart-header"><h2>Журнал устройства</h2><span id="journalStatus" class="chart-count">кэш</span></div>
+        <div class="tracks-toolbar"><button id="refreshJournalButton" class="action" type="button">Загрузить с устройства</button><button id="downloadJournalButton" class="action" type="button">Скачать CSV</button></div>
+        <div id="journalList" class="journal-list">Журнал ещё не загружен.</div>
+      </section>
+    </div>
+
+    <div id="dataTab" class="tab-page" hidden>
+      <section class="card">
+        <div class="chart-header"><h2>Локальное хранилище</h2><span id="storageUsage" class="chart-count">—</span></div>
+        <div id="storageInfo" class="detail-panel"></div>
+        <div class="compact-controls">
+          <select id="cacheTrackSelect" aria-label="Трек в кэше"></select>
+          <button id="deleteCachedTrackButton" class="action" type="button">Удалить кэш трека</button>
+          <button id="stripCachedTrackButton" class="action" type="button">Убрать геометрию</button>
+          <button id="cleanStaleTracksButton" class="action" type="button">Очистить устаревшие</button>
+          <button id="deleteBatteryButton" class="action" type="button">Удалить батарею</button>
+          <button id="persistStorageButton" class="action" type="button">Защитить хранилище</button>
+        </div>
+        <div id="batteryAnalytics" class="track-stats"></div>
+      </section>
+    </div>
+
+    <div id="log" class="log">Откройте выбор Bluetooth-устройства кнопкой «Подключить».</div>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const UUID = {
+      service: '9f6d1000-2b9e-4a5f-8c7d-6f3e4b2a1000',
+      telemetry: '9f6d1001-2b9e-4a5f-8c7d-6f3e4b2a1000',
+      nav: '9f6d1002-2b9e-4a5f-8c7d-6f3e4b2a1000',
+      settings: '9f6d1003-2b9e-4a5f-8c7d-6f3e4b2a1000',
+      command: '9f6d1004-2b9e-4a5f-8c7d-6f3e4b2a1000',
+      response: '9f6d1005-2b9e-4a5f-8c7d-6f3e4b2a1000',
+      history: '9f6d1006-2b9e-4a5f-8c7d-6f3e4b2a1000'
+      ,trackTransfer: '9f6d1007-2b9e-4a5f-8c7d-6f3e4b2a1000'
+      ,cycleStatus: '9f6d1008-2b9e-4a5f-8c7d-6f3e4b2a1000'
+    };
+
+    const element = Object.fromEntries([
+      'connectButton', 'connectionText', 'gpsLamp', 'recLamp', 'sdLamp', 'batteryTop',
+      'distance', 'speed', 'altitude', 'deltaAltitude', 'logTime', 'satellites', 'route',
+      'latitude', 'longitude', 'recordButton', 'markButton', 'newButton', 'settingsForm',
+      'tracksButton', 'tracksPanel', 'refreshTracksButton', 'cancelTrackLoadButton',
+      'downloadTrackButton',
+      'downloadGpxButton', 'sdSpace', 'trackStats',
+      'trackList', 'mapStatus', 'trackMap', 'mapTrackTitle', 'mapShell', 'fullscreenMapButton',
+      'followCoordinates',
+      'telemetryTab', 'mapTab', 'telemetryTabButton', 'mapTabButton',
+      'journalTab', 'dataTab', 'journalTabButton', 'dataTabButton',
+      'gpsTimeout', 'minSatellites', 'maxHdop', 'sleepTime', 'minPoints', 'screenEnabled', 'bleEnabled',
+      'filterEnabled', 'cycleState', 'wakeReason', 'cyclePoints', 'cycleGpsTime', 'cycleSleep',
+      'sdHealth', 'usbCycle', 'queueBadge', 'queueState', 'clearPendingSettings', 'clearPendingMarks',
+      'sleepWhileBle',
+      'autoReconnect',
+      'saveSettings', 'trackCanvas', 'trackCount',
+      'trackBounds', 'batteryCanvas', 'batteryCount', 'batteryRange', 'log',
+      'profileSelect', 'applyProfileButton', 'saveProfileButton', 'deleteProfileButton',
+      'baseMapSelect', 'showTrackLine', 'showTrackPoints', 'showTrackMarks', 'showBadHdop',
+      'routeImportFile', 'clearRouteButton', 'resetPeriodButton', 'routeFromStart', 'routePeriod',
+      'routeToEnd', 'pointDetails', 'journalStatus', 'refreshJournalButton', 'downloadJournalButton',
+      'journalList', 'storageUsage', 'storageInfo', 'cacheTrackSelect', 'deleteCachedTrackButton',
+      'stripCachedTrackButton', 'cleanStaleTracksButton', 'deleteBatteryButton',
+      'persistStorageButton', 'batteryAnalytics'
+    ].map(id => [id, document.getElementById(id)]));
+
+    let device = null;
+    let server = null;
+    let characteristic = {};
+    let manualDisconnect = false;
+    let connecting = false;
+    let reconnecting = false;
+    let autoReconnectEnabled = localStorage.getItem('c6TrackerAutoReconnect') !== '0';
+    let gattQueue = Promise.resolve();
+    const state = { connected: false, gps: false, recording: false, sd: false, altitudeValid: false,
+      currentAltitude: 0, latitude: 0, longitude: 0, route: 0, pointCount: 0, speed: 0,
+      batterySequence: 0, cycleComplete: false, cycleId: 0, cycleAcknowledged: false,
+      sdWriteError: false, sdLowSpace: false, sdTailRepaired: false, usbConnected: false,
+      hdop: 0, satellites: 0 };
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+    let trackPoints = [];
+    let userPoints = [];
+    let batterySamples = [];
+    let incomingBatterySamples = [];
+    let trackHistoryLoading = false;
+    let batteryHistoryLoading = false;
+    let historyRequestPending = false;
+    let chartFramePending = false;
+    let trackChartDirty = false;
+    let batteryChartDirty = false;
+    let batteryHistoryFormat = 1;
+    let availableTracks = [];
+    let loadedMapRoute = 0;
+    let loadedMapIsCurrent = false;
+    let mapLoading = false;
+    let mapIncrementalLoading = false;
+    let mapExpectedBytes = 0;
+    let mapExpectedRecords = 0;
+    let mapTrackPoints = [];
+    let mapUserPoints = [];
+    let trackMap = null;
+    let mapRouteLine = null;
+    let mapPointLayer = null;
+    let mapMarkLayer = null;
+    let mapBadHdopLayer = null;
+    let mapReferenceLine = null;
+    let activeBaseLayer = null;
+    let selectedMapPoints = [];
+    let referenceRoute = [];
+    let referenceCumulative = [];
+    let journalText = '';
+    let journalLoading = false;
+    let periodState = { startedAt: Date.now(), distanceKm: 0, lastPoint: null };
+    let followCoordinatesEnabled = localStorage.getItem('c6TrackerFollowCoordinates') === '1';
+    let pendingMarkDetails = null;
+    let activePendingMark = null;
+    let pendingMarkSending = false;
+    let expectedSleepUntil = 0;
+    let sleepCountdownTimer = null;
+    const SETTINGS_DRAFT_KEY = 'c6TrackerSettingsDraftV1';
+    const MARK_QUEUE_KEY = 'c6TrackerMarkQueueV1';
+    const TELEMETRY_CACHE_KEY = 'c6TrackerTelemetryV1';
+    const PROFILES_KEY = 'c6TrackerProfilesV1';
+    const PERIOD_KEY = 'c6TrackerRoutePeriodV1';
+    const CACHE_DB_NAME = 'c6TrackerCache';
+    const CACHE_STORE = 'values';
+    let cacheDbPromise = null;
+    let compactCacheMeta = { route: 0, pointCount: 0, batterySequence: 0 };
+    let lastTelemetryCacheAt = 0;
+    let lastAcknowledgedCycle = 0;
+    let lastDeviceSettings = null;
+
+    function openCacheDb() {
+      if (!('indexedDB' in window)) return Promise.resolve(null);
+      if (!cacheDbPromise) cacheDbPromise = new Promise((resolve, reject) => {
+        const request = indexedDB.open(CACHE_DB_NAME, 1);
+        request.onupgradeneeded = () => request.result.createObjectStore(CACHE_STORE);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      }).catch(error => { console.warn('Cache unavailable', error); return null; });
+      return cacheDbPromise;
+    }
+
+    async function cacheGet(key) {
+      const db = await openCacheDb();
+      if (!db) {
+        try { return JSON.parse(localStorage.getItem(`c6Cache:${key}`) || 'null'); }
+        catch { return null; }
+      }
+      return new Promise(resolve => {
+        const request = db.transaction(CACHE_STORE).objectStore(CACHE_STORE).get(key);
+        request.onsuccess = () => resolve(request.result ?? null);
+        request.onerror = () => resolve(null);
+      });
+    }
+
+    async function cacheSet(key, value) {
+      const db = await openCacheDb();
+      if (!db) {
+        try { localStorage.setItem(`c6Cache:${key}`, JSON.stringify(value)); } catch (error) {
+          console.warn('Local cache is full', error);
+        }
+        return;
+      }
+      await new Promise(resolve => {
+        const request = db.transaction(CACHE_STORE, 'readwrite').objectStore(CACHE_STORE).put(value, key);
+        request.onsuccess = request.onerror = () => resolve();
+      });
+    }
+
+    async function cacheDelete(key) {
+      const db = await openCacheDb();
+      if (!db) { localStorage.removeItem(`c6Cache:${key}`); return; }
+      await new Promise(resolve => {
+        const request = db.transaction(CACHE_STORE, 'readwrite').objectStore(CACHE_STORE).delete(key);
+        request.onsuccess = request.onerror = () => resolve();
+      });
+    }
+
+    async function cacheKeys() {
+      const db = await openCacheDb();
+      if (!db) return Object.keys(localStorage).filter(key => key.startsWith('c6Cache:')).map(key => key.slice(8));
+      return new Promise(resolve => {
+        const request = db.transaction(CACHE_STORE).objectStore(CACHE_STORE).getAllKeys();
+        request.onsuccess = () => resolve(request.result || []);
+        request.onerror = () => resolve([]);
+      });
+    }
+
+    function saveCompactCache() {
+      compactCacheMeta = { route: state.route || compactCacheMeta.route,
+        pointCount: state.route ? state.pointCount : compactCacheMeta.pointCount,
+        batterySequence: Math.max(compactCacheMeta.batterySequence || 0,
+          ...batterySamples.map(sample => Number(sample?.id) || 0)) };
+      cacheSet('compactHistory', { trackPoints, userPoints, batterySamples, meta: compactCacheMeta });
+    }
+
+    function readSettingsForm() {
+      return {
+        gpsTimeout: Math.round(Number(element.gpsTimeout.value)),
+        minSatellites: Math.round(Number(element.minSatellites.value)),
+        maxHdop: Number(element.maxHdop.value), sleepTime: Math.round(Number(element.sleepTime.value)),
+        minPoints: Math.round(Number(element.minPoints.value)), screenEnabled: element.screenEnabled.checked,
+        bleEnabled: element.bleEnabled.checked, filterEnabled: element.filterEnabled.checked,
+        sleepWhileBle: element.sleepWhileBle.checked
+      };
+    }
+
+    function applySettingsForm(values) {
+      if (!values) return;
+      for (const key of ['gpsTimeout', 'minSatellites', 'maxHdop', 'sleepTime', 'minPoints']) {
+        if (values[key] !== undefined) element[key].value = values[key];
+      }
+      for (const key of ['screenEnabled', 'bleEnabled', 'filterEnabled', 'sleepWhileBle']) {
+        if (values[key] !== undefined) element[key].checked = Boolean(values[key]);
+      }
+    }
+
+    function getSettingsDraft() {
+      try { return JSON.parse(localStorage.getItem(SETTINGS_DRAFT_KEY) || 'null'); }
+      catch { return null; }
+    }
+
+    function saveSettingsDraft(values, dirty) {
+      localStorage.setItem(SETTINGS_DRAFT_KEY, JSON.stringify({ values, dirty, savedAt: Date.now() }));
+      element.saveSettings.classList.toggle('pending', dirty);
+      updateSettingsButton();
+      element.saveSettings.title = dirty ? 'Изменения сохранены локально и ожидают подключения' : '';
+      renderQueueState();
+    }
+
+    function getPendingMarks() {
+      try { return JSON.parse(localStorage.getItem(MARK_QUEUE_KEY) || '[]'); }
+      catch { return []; }
+    }
+
+    function savePendingMarks(marks) {
+      localStorage.setItem(MARK_QUEUE_KEY, JSON.stringify(marks));
+      element.markButton.textContent = marks.length ? `Поставить точку · ожидает ${marks.length}` : 'Поставить точку';
+      renderQueueState();
+    }
+
+    function updateSettingsButton() {
+      element.saveSettings.textContent = state.connected ? 'Отправить' : 'Отправить при подключении';
+    }
+
+    function renderQueueState() {
+      const draft = getSettingsDraft();
+      const marks = getPendingMarks();
+      const actions = [];
+      if (draft?.dirty) actions.push('<strong>настройки ожидают отправки</strong>');
+      if (marks.length) actions.push(`<strong>точек: ${marks.length}</strong> · ожидание GPS`);
+      element.queueState.innerHTML = actions.length ? actions.join('<br>') : 'Нет отложенных действий.';
+      const count = (draft?.dirty ? 1 : 0) + marks.length;
+      element.queueBadge.textContent = count ? `ожидает ${count}` : 'пусто';
+      element.clearPendingSettings.disabled = !draft?.dirty;
+      element.clearPendingMarks.disabled = marks.length === 0;
+    }
+
+    function saveTelemetryCache(snapshot) {
+      const now = Date.now();
+      if (now - lastTelemetryCacheAt < 3000) return;
+      lastTelemetryCacheAt = now;
+      localStorage.setItem(TELEMETRY_CACHE_KEY, JSON.stringify({ ...snapshot, savedAt: now }));
+    }
+
+    function restoreTelemetryCache() {
+      let cached = null;
+      try { cached = JSON.parse(localStorage.getItem(TELEMETRY_CACHE_KEY) || 'null'); } catch {}
+      if (!cached) return;
+      element.distance.innerHTML = `${Number(cached.distanceKm || 0).toFixed(cached.distanceKm < 1000 ? 2 : 1)}<span>км</span>`;
+      element.altitude.innerHTML = `${cached.altitudeValid ? cached.altitude : '---'} <small>м</small>`;
+      element.speed.innerHTML = `${Number(cached.speed || 0).toFixed(1)} <small>км/ч</small>`;
+      element.batteryTop.textContent = `${cached.batteryPercent ?? '--'}%`;
+      element.batteryTop.title = cached.batteryMv ? `${(cached.batteryMv / 1000).toFixed(2)} В` : '';
+      element.satellites.textContent = `${cached.satellites || 0} / ${cached.hdopRaw ? (cached.hdopRaw / 100).toFixed(2) : '--'}`;
+      element.route.textContent = `${String(cached.route || 0).padStart(3, '0')} / ${cached.points || 0}`;
+    }
+
+    function setLog(message, type = '') {
+      element.log.textContent = message;
+      element.log.className = `log ${type}`.trim();
+    }
+
+    function expectDeviceSleep() {
+      const seconds = Math.max(0, Number(element.sleepTime.value) || 0);
+      expectedSleepUntil = Date.now() + seconds * 1000;
+      setLog(`Устройство засыпает на ${seconds} с.`);
+    }
+
+    function waitForDeviceWake() {
+      if (!expectedSleepUntil) return false;
+      if (sleepCountdownTimer) clearInterval(sleepCountdownTimer);
+      const update = () => {
+        const remaining = Math.max(0, Math.ceil((expectedSleepUntil - Date.now()) / 1000));
+        element.connectionText.textContent = remaining ? `Сон устройства: ещё ${remaining} с` : 'Ожидание пробуждения…';
+        setLog(remaining ? `Устройство спит. Переподключение через ${remaining} с.` : 'Устройство должно проснуться. Переподключение…');
+        if (!remaining) {
+          clearInterval(sleepCountdownTimer);
+          sleepCountdownTimer = null;
+          expectedSleepUntil = 0;
+          manualDisconnect = false;
+          reconnecting = false;
+          reconnectLoop(true);
+        }
+      };
+      update();
+      if (expectedSleepUntil) sleepCountdownTimer = setInterval(update, 1000);
+      return true;
+    }
+
+    function setControls(enabled) {
+      [element.recordButton, element.newButton, element.refreshTracksButton, element.cancelTrackLoadButton]
+        .forEach(control => { control.disabled = !enabled; });
+      element.markButton.disabled = false;
+      element.tracksButton.disabled = false;
+      updateSettingsButton();
+    }
+
+    function ensureMap() {
+      if (trackMap || typeof L === 'undefined') return Boolean(trackMap);
+      trackMap = L.map(element.trackMap, { zoomControl: true }).setView([55.75, 37.62], 5);
+      setBaseMap(localStorage.getItem('c6TrackerBaseMap') || 'positron');
+      mapRouteLine = L.polyline([], { color: '#e32636', weight: 1, opacity: .82 }).addTo(trackMap);
+      mapPointLayer = L.layerGroup().addTo(trackMap);
+      mapMarkLayer = L.layerGroup().addTo(trackMap);
+      mapBadHdopLayer = L.layerGroup().addTo(trackMap);
+      mapReferenceLine = L.polyline([], { color: '#a855f7', weight: 4, opacity: .75, dashArray: '8 6' }).addTo(trackMap);
+      return true;
+    }
+
+    const BASE_MAPS = {
+      positron: ['https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', maxZoom: 20, attribution: '&copy; OpenStreetMap contributors &copy; CARTO' }],
+      dark: ['https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', maxZoom: 20, attribution: '&copy; OpenStreetMap contributors &copy; CARTO' }],
+      osm: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }],
+      satellite: ['https://wi.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Tiles &copy; Esri' }],
+      transport: ['https://tile.memomaps.de/tilegen/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors, ÖPNVKarte' }],
+      cyclosm: ['https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', { subdomains: 'abc', maxZoom: 20, attribution: '&copy; OpenStreetMap contributors, CyclOSM' }]
+    };
+
+    function setBaseMap(name) {
+      if (!trackMap) return;
+      if (activeBaseLayer) trackMap.removeLayer(activeBaseLayer);
+      const [url, options] = BASE_MAPS[name] || BASE_MAPS.positron;
+      activeBaseLayer = L.tileLayer(url, options).addTo(trackMap);
+      activeBaseLayer.bringToBack();
+      element.baseMapSelect.value = name in BASE_MAPS ? name : 'positron';
+      localStorage.setItem('c6TrackerBaseMap', element.baseMapSelect.value);
+    }
+
+    function clearMapTrack() {
+      mapTrackPoints = [];
+      mapUserPoints = [];
+      mapRouteLine?.setLatLngs([]);
+      mapPointLayer?.clearLayers();
+      mapMarkLayer?.clearLayers();
+      mapBadHdopLayer?.clearLayers();
+      element.downloadTrackButton.disabled = true;
+      element.downloadGpxButton.disabled = true;
+      element.trackStats.innerHTML = '';
+    }
+
+    function altitudePointStyle(point, previous) {
+      const delta = previous ? point.altitude - previous.altitude : 0;
+      const magnitude = Math.abs(delta);
+      let color = '#8b9298';
+      if (magnitude > 1) {
+        const lightness = Math.round(32 + Math.min(1, (magnitude - 1) / 19) * 30);
+        color = delta > 0 ? `hsl(122 72% ${lightness}%)` : `hsl(355 78% ${lightness}%)`;
+      }
+      return { delta, style: { radius: 3, color, weight: 2, fillColor: '#92979c', fillOpacity: .95 } };
+    }
+
+    function pointTooltip(point, previous) {
+      const delta = previous ? point.altitude - previous.altitude : 0;
+      return `${point.lat.toFixed(6)}, ${point.lon.toFixed(6)} · ${point.altitude} м · ${delta >= 0 ? '+' : ''}${delta.toFixed(1)} м · ${(point.speed || 0).toFixed(1)} км/ч`;
+    }
+
+    function distanceMeters(a, b) {
+      const radians = Math.PI / 180, radius = 6371008.8;
+      const dLat = (b.lat - a.lat) * radians, dLon = (b.lon - a.lon) * radians;
+      const value = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * radians) * Math.cos(b.lat * radians) * Math.sin(dLon / 2) ** 2;
+      return radius * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+    }
+
+    function selectMapPoint(point, index) {
+      selectedMapPoints.push({ point, index });
+      selectedMapPoints = selectedMapPoints.slice(-2);
+      const rows = Object.entries(point).map(([key, value]) => `${key}: ${value}`).join('\n');
+      const measure = selectedMapPoints.length === 2
+        ? `\n\nМежду выбранными: ${(distanceMeters(selectedMapPoints[0].point, point) / 1000).toFixed(3)} км по прямой`
+        : '\n\nВыберите ещё одну точку для измерения.';
+      const label = typeof index === 'number' ? `Точка ${index + 1}` : `Точка: ${index}`;
+      element.pointDetails.textContent = `${label}\n${rows}${measure}`;
+    }
+
+    function applyMapVisibility() {
+      if (!trackMap) return;
+      const toggle = (layer, visible) => visible ? layer && !trackMap.hasLayer(layer) && layer.addTo(trackMap)
+        : layer && trackMap.hasLayer(layer) && trackMap.removeLayer(layer);
+      toggle(mapRouteLine, element.showTrackLine.checked);
+      toggle(mapPointLayer, element.showTrackPoints.checked);
+      toggle(mapMarkLayer, element.showTrackMarks.checked);
+      toggle(mapBadHdopLayer, element.showBadHdop.checked);
+    }
+
+    function rebuildReferenceDistance() {
+      referenceCumulative = [0];
+      for (let index = 1; index < referenceRoute.length; index++) {
+        referenceCumulative[index] = referenceCumulative[index - 1] + distanceMeters(referenceRoute[index - 1], referenceRoute[index]);
+      }
+    }
+
+    function nearestReferenceIndex(point) {
+      let best = -1, distance = Infinity;
+      referenceRoute.forEach((candidate, index) => {
+        const current = distanceMeters(point, candidate);
+        if (current < distance) { distance = current; best = index; }
+      });
+      return best;
+    }
+
+    function updateRouteCounters() {
+      const current = mapTrackPoints[mapTrackPoints.length - 1] || (state.gps ? { lat: state.latitude, lon: state.longitude } : null);
+      if (referenceRoute.length && current) {
+        const index = nearestReferenceIndex(current), total = referenceCumulative[referenceCumulative.length - 1] || 0;
+        const fromStart = index >= 0 ? referenceCumulative[index] : 0;
+        element.routeFromStart.textContent = `${(fromStart / 1000).toFixed(2)} км`;
+        element.routeToEnd.textContent = `${(Math.max(0, total - fromStart) / 1000).toFixed(2)} км`;
+      } else {
+        element.routeFromStart.textContent = element.routeToEnd.textContent = '—';
+      }
+      element.routePeriod.textContent = `${periodState.distanceKm.toFixed(2)} км · ${formatDuration(Math.floor((Date.now() - periodState.startedAt) / 1000))}`;
+    }
+
+    function recordPeriodPoint(point) {
+      if (periodState.lastPoint) {
+        const meters = distanceMeters(periodState.lastPoint, point);
+        if (meters < 250) periodState.distanceKm += meters / 1000;
+      }
+      periodState.lastPoint = { lat: point.lat, lon: point.lon };
+      localStorage.setItem(PERIOD_KEY, JSON.stringify(periodState));
+      updateRouteCounters();
+    }
+
+    function renderTrackStats() {
+      const points = mapTrackPoints;
+      let distance = 0, ascent = 0, descent = 0, maximumSpeed = 0;
+      for (let index = 1; index < points.length; index++) {
+        distance += distanceMeters(points[index - 1], points[index]);
+        const delta = points[index].altitude - points[index - 1].altitude;
+        if (delta > 1) ascent += delta; else if (delta < -1) descent -= delta;
+      }
+      points.forEach(point => { maximumSpeed = Math.max(maximumSpeed, point.speed || 0); });
+      const altitudes = points.map(point => point.altitude).filter(Number.isFinite);
+      const timed = points.filter(point => point.epoch > 0);
+      const duration = timed.length > 1 ? Math.max(0, timed[timed.length - 1].epoch - timed[0].epoch) : 0;
+      const averageSpeed = duration ? distance / 1000 / (duration / 3600) : 0;
+      const values = [
+        ['Дистанция', `${(distance / 1000).toFixed(2)} км`], ['Длительность', formatDuration(duration)],
+        ['Мин. высота', altitudes.length ? `${Math.min(...altitudes).toFixed(0)} м` : '—'],
+        ['Макс. высота', altitudes.length ? `${Math.max(...altitudes).toFixed(0)} м` : '—'],
+        ['Набор', `+${ascent.toFixed(0)} м`], ['Сброс', `-${descent.toFixed(0)} м`],
+        ['Средняя скорость', `${averageSpeed.toFixed(1)} км/ч`], ['Макс. скорость', `${maximumSpeed.toFixed(1)} км/ч`],
+        ['GPS-точки', String(points.length)], ['Метки', String(mapUserPoints.length)]
+      ];
+      element.trackStats.innerHTML = values.map(([label, value]) => `<div class="track-stat"><span>${label}</span><strong>${value}</strong></div>`).join('');
+    }
+
+    function drawLoadedMapTrack(fitWholeTrack) {
+      if (!ensureMap()) {
+        element.mapStatus.textContent = 'Не удалось загрузить Leaflet. Проверьте интернет.';
+        return;
+      }
+      mapRouteLine.setLatLngs(mapTrackPoints.map(point => [point.lat, point.lon]));
+      mapPointLayer.clearLayers();
+      mapMarkLayer.clearLayers();
+      mapBadHdopLayer.clearLayers();
+      mapTrackPoints.forEach((point, index) => {
+        const previous = index ? mapTrackPoints[index - 1] : null;
+        const marker = L.circleMarker([point.lat, point.lon], altitudePointStyle(point, previous).style)
+          .bindTooltip(pointTooltip(point, previous)).on('click', () => selectMapPoint(point, index));
+        marker.addTo(mapPointLayer);
+        if (previous && Number(point.hdop) > Number(element.maxHdop.value || 5)) {
+          L.polyline([[previous.lat, previous.lon], [point.lat, point.lon]], { color: '#ff9f1a', weight: 4, opacity: .85, dashArray: '4 5' }).addTo(mapBadHdopLayer);
+        }
+      });
+      mapUserPoints.forEach((point, index) => L.circleMarker([point.lat, point.lon], {
+        radius: 7, color: '#fff', weight: 2, fillColor: '#ff2028', fillOpacity: 1
+      }).bindTooltip(`${point.name || `Метка ${index + 1}`}: ${point.lat.toFixed(6)}, ${point.lon.toFixed(6)} · ${point.altitude} м${point.comment ? ` · ${point.comment}` : ''}`)
+        .on('click', () => selectMapPoint(point, `метка ${index + 1}`)).addTo(mapMarkLayer));
+      const all = [...mapTrackPoints, ...mapUserPoints];
+      if (fitWholeTrack && all.length) {
+        const bounds = L.latLngBounds(all.map(point => [point.lat, point.lon]));
+        if (bounds.isValid()) trackMap.fitBounds(bounds.pad(.08), { maxZoom: 17 });
+      }
+      renderTrackStats();
+      applyMapVisibility();
+      updateRouteCounters();
+    }
+
+    function appendLiveMapPoint(latitude, longitude, altitude) {
+      if (!loadedMapIsCurrent || mapLoading || !state.gps || (!latitude && !longitude) || !ensureMap()) return;
+      const previous = mapTrackPoints[mapTrackPoints.length - 1];
+      if (previous && Math.abs(previous.lat - latitude) < 1e-7 && Math.abs(previous.lon - longitude) < 1e-7) return;
+      const point = { lat: latitude, lon: longitude, altitude, speed: state.speed,
+        epoch: Math.floor(Date.now() / 1000), hdop: state.hdop, sats: state.satellites, cycleId: state.cycleId };
+      mapTrackPoints.push(point);
+      mapRouteLine.addLatLng([latitude, longitude]);
+      const previousForStyle = mapTrackPoints.length > 1 ? mapTrackPoints[mapTrackPoints.length - 2] : null;
+      L.circleMarker([latitude, longitude], altitudePointStyle(point, previousForStyle).style)
+        .bindTooltip(pointTooltip(point, previousForStyle)).addTo(mapPointLayer);
+      if (followCoordinatesEnabled) trackMap.setView([latitude, longitude], 15);
+      element.mapStatus.textContent = `Текущий трек · ${mapTrackPoints.length} точек · обновляется в реальном времени`;
+      renderTrackStats();
+      cacheSet(`mapTrack:${loadedMapRoute}`, { route: loadedMapRoute, current: true,
+        updated: Math.floor(Date.now() / 1000), trackPoints: mapTrackPoints, userPoints: mapUserPoints });
+    }
+
+    function appendLiveMapMark(latitude, longitude, altitude, details = {}) {
+      if (!loadedMapIsCurrent || mapLoading || (!latitude && !longitude) || !ensureMap()) return;
+      const point = { lat: latitude, lon: longitude, altitude, name: details.name || '', comment: details.comment || '', epoch: Math.floor(Date.now() / 1000) };
+      mapUserPoints.push(point);
+      const number = mapUserPoints.length;
+      L.circleMarker([latitude, longitude], {
+        radius: 7, color: '#fff', weight: 2, fillColor: '#ff2028', fillOpacity: 1
+      }).bindTooltip(`${point.name || `Метка ${number}`}: ${latitude.toFixed(6)}, ${longitude.toFixed(6)} · ${altitude} м${point.comment ? ` · ${point.comment}` : ''}`).addTo(mapMarkLayer);
+      element.mapStatus.textContent = `Текущий трек · ${mapTrackPoints.length} точек · ${mapUserPoints.length} меток`;
+      cacheSet(`mapTrack:${loadedMapRoute}`, { route: loadedMapRoute, current: true,
+        updated: Math.floor(Date.now() / 1000), trackPoints: mapTrackPoints, userPoints: mapUserPoints });
+    }
+
+    function downloadLoadedTrack() {
+      if (!loadedMapRoute || mapLoading || (!mapTrackPoints.length && !mapUserPoints.length)) return;
+      const features = [];
+      if (mapTrackPoints.length >= 2) {
+        features.push({
+          type: 'Feature',
+          properties: { point_type: 'track', route: loadedMapRoute, current: loadedMapIsCurrent },
+          geometry: { type: 'LineString', coordinates: mapTrackPoints.map(point => [point.lon, point.lat, point.altitude]) }
+        });
+      } else if (mapTrackPoints.length === 1) {
+        const point = mapTrackPoints[0];
+        features.push({ type: 'Feature', properties: { point_type: 'track', route: loadedMapRoute },
+          geometry: { type: 'Point', coordinates: [point.lon, point.lat, point.altitude] } });
+      }
+      mapUserPoints.forEach((point, index) => features.push({
+        type: 'Feature',
+        properties: { point_type: 'user_point', route: loadedMapRoute, number: index + 1, name: point.name || '', comment: point.comment || '', gps_epoch: point.epoch || 0 },
+        geometry: { type: 'Point', coordinates: [point.lon, point.lat, point.altitude] }
+      }));
+      const blob = new Blob([JSON.stringify({ type: 'FeatureCollection', features }, null, 2)], { type: 'application/geo+json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `track_${String(loadedMapRoute).padStart(3, '0')}.geojson`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function xmlEscape(value) {
+      return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function isoTime(epoch) { return epoch > 0 ? `<time>${new Date(epoch * 1000).toISOString()}</time>` : ''; }
+
+    function downloadLoadedGpx() {
+      if (!loadedMapRoute || mapLoading || (!mapTrackPoints.length && !mapUserPoints.length)) return;
+      const waypoints = mapUserPoints.map((point, index) => `<wpt lat="${point.lat}" lon="${point.lon}"><ele>${point.altitude}</ele>${isoTime(point.epoch)}<name>${xmlEscape(point.name || `Метка ${index + 1}`)}</name><desc>${xmlEscape(point.comment || '')}</desc></wpt>`).join('');
+      const track = mapTrackPoints.map(point => `<trkpt lat="${point.lat}" lon="${point.lon}"><ele>${point.altitude}</ele>${isoTime(point.epoch)}</trkpt>`).join('');
+      const gpx = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="C6 Tracker" xmlns="http://www.topografix.com/GPX/1/1">${waypoints}<trk><name>track_${String(loadedMapRoute).padStart(3, '0')}</name><trkseg>${track}</trkseg></trk></gpx>`;
+      const blob = new Blob([gpx], { type: 'application/gpx+xml' }), url = URL.createObjectURL(blob), link = document.createElement('a');
+      link.href = url; link.download = `track_${String(loadedMapRoute).padStart(3, '0')}.gpx`; document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function renderTrackList() {
+      element.trackList.innerHTML = '';
+      availableTracks = [...new Map(availableTracks.map(track => [track.route, track])).values()];
+      availableTracks.sort((a, b) => b.route - a.route).forEach(track => {
+        const row = document.createElement('div');
+        row.className = 'track-list-item';
+        row.innerHTML = `<div><strong>${track.name || `Трек ${String(track.route).padStart(3, '0')}`}${track.current ? ' · текущий' : ''}</strong>` +
+          `<div class="track-list-meta">track_${String(track.route).padStart(3, '0')}.geojsonl · ${(track.size / 1024).toFixed(1)} КБ · ${track.points ?? '?'} точек · ${track.marks ?? '?'} меток<br>` +
+          `создан: ${track.created ? new Date(track.created * 1000).toLocaleString() : 'нет данных'} · обновлён: ${track.updated ? new Date(track.updated * 1000).toLocaleString() : 'нет данных'}</div></div>` +
+          `<div><button class="action" type="button" data-load-route="${track.route}">Открыть</button>` +
+          `<button class="action" type="button" data-rename-route="${track.route}">Имя</button>` +
+          `${track.current ? '' : `<button class="action" type="button" data-delete-route="${track.route}">Удалить</button>`}</div>`;
+        element.trackList.appendChild(row);
+      });
+      if (!availableTracks.length) element.trackList.textContent = 'Файлы треков не найдены.';
+    }
+
+    async function showCachedMapTrack(route) {
+      const cached = await cacheGet(`mapTrack:${route}`);
+      if (!cached) return false;
+      loadedMapRoute = route;
+      loadedMapIsCurrent = Boolean(cached.current);
+      mapTrackPoints = Array.isArray(cached.trackPoints) ? cached.trackPoints : [];
+      mapUserPoints = Array.isArray(cached.userPoints) ? cached.userPoints : [];
+      element.mapTrackTitle.textContent = `TRACK ${String(route).padStart(3, '0')}`;
+      drawLoadedMapTrack(true);
+      element.downloadTrackButton.disabled = !mapTrackPoints.length && !mapUserPoints.length;
+      element.downloadGpxButton.disabled = !mapTrackPoints.length && !mapUserPoints.length;
+      element.mapStatus.textContent = `Из кэша · ${mapTrackPoints.length} точек · ${mapUserPoints.length} меток`;
+      return true;
+    }
+
+    function decodeTrackTransfer(value) {
+      if (value.byteLength < 2 || value.getUint8(0) !== 1) return;
+      const type = value.getUint8(1);
+      if (type === 1) {
+        availableTracks = [];
+        element.trackList.textContent = 'Получение списка…';
+        if (value.byteLength >= 12) element.sdSpace.textContent = `SD: свободно ${value.getUint32(8, true)} МБ из ${value.getUint32(4, true)} МБ`;
+      } else if (type === 2 && value.byteLength >= 9) {
+        const next = { route: value.getUint16(2, true), size: value.getUint32(4, true), current: Boolean(value.getUint8(8) & 1) };
+        const existing = availableTracks.find(track => track.route === next.route);
+        if (existing) Object.assign(existing, next);
+        else availableTracks.push(next);
+      } else if (type === 3) {
+        renderTrackList();
+        cacheSet('trackList', availableTracks);
+      } else if (type === 4 && value.byteLength >= 9) {
+        const incomingRoute = value.getUint16(2, true);
+        const incremental = value.byteLength >= 10 && Boolean(value.getUint8(9) & 1);
+        mapIncrementalLoading = incremental && loadedMapRoute === incomingRoute;
+        loadedMapRoute = incomingRoute;
+        mapExpectedBytes = value.getUint32(4, true);
+        loadedMapIsCurrent = Boolean(value.getUint8(8) & 1);
+        const trackMeta = availableTracks.find(track => track.route === loadedMapRoute);
+        mapExpectedRecords = Number(trackMeta?.points || 0) + Number(trackMeta?.marks || 0);
+        mapLoading = true;
+        element.downloadTrackButton.disabled = true;
+        if (!mapIncrementalLoading) clearMapTrack();
+        element.mapTrackTitle.textContent = `TRACK ${String(loadedMapRoute).padStart(3, '0')}`;
+        element.mapStatus.textContent = 'Загрузка 0%';
+      } else if (type === 5 && value.byteLength >= 18) {
+        const point = { lat: value.getInt32(4, true) / 1e7, lon: value.getInt32(8, true) / 1e7,
+          altitude: value.getInt16(12, true), speed: value.byteLength >= 20 ? value.getUint16(14, true) / 10 : 0,
+          epoch: value.byteLength >= 20 ? value.getUint32(16, true) : 0 };
+        if (value.getUint8(2) === 1) mapUserPoints.push(point); else mapTrackPoints.push(point);
+        const loadedRecords = mapTrackPoints.length + mapUserPoints.length;
+        const percent = mapExpectedRecords ? Math.min(100, Math.round(loadedRecords * 100 / mapExpectedRecords)) : 0;
+        element.mapStatus.textContent = `Загрузка с SD${mapExpectedRecords ? `: ${percent}%` : ''} · ${mapTrackPoints.length} точек · ${mapUserPoints.length} меток`;
+      } else if (type === 7) {
+        mapLoading = false;
+        drawLoadedMapTrack(!mapIncrementalLoading);
+        element.downloadTrackButton.disabled = !mapTrackPoints.length && !mapUserPoints.length;
+        element.downloadGpxButton.disabled = !mapTrackPoints.length && !mapUserPoints.length;
+        element.mapStatus.textContent = `${loadedMapIsCurrent ? 'Текущий' : 'Архивный'} трек · ${mapTrackPoints.length} точек · ${mapUserPoints.length} меток`;
+        const meta = availableTracks.find(track => track.route === loadedMapRoute);
+        cacheSet(`mapTrack:${loadedMapRoute}`, { route: loadedMapRoute, current: loadedMapIsCurrent,
+          updated: meta?.updated || 0, trackPoints: mapTrackPoints, userPoints: mapUserPoints });
+        mapIncrementalLoading = false;
+      } else if ((type === 8 || type === 9) && value.byteLength >= 5) {
+        const index = value.getUint16(2, true), length = value.getUint8(4);
+        if (mapUserPoints[index]) mapUserPoints[index][type === 8 ? 'name' : 'comment'] = decoder.decode(new Uint8Array(value.buffer, value.byteOffset + 5, Math.min(length, value.byteLength - 5)));
+      } else if (type === 10 && value.byteLength >= 5) {
+        const route = value.getUint16(2, true), length = value.getUint8(4);
+        const track = availableTracks.find(item => item.route === route);
+        if (track) track.name = decoder.decode(new Uint8Array(value.buffer, value.byteOffset + 5, Math.min(length, value.byteLength - 5)));
+      } else if (type === 11 && value.byteLength >= 20) {
+        const track = availableTracks.find(item => item.route === value.getUint16(2, true));
+        if (track) {
+          track.points = value.getUint32(4, true); track.marks = value.getUint32(8, true);
+          track.created = value.getUint32(12, true); track.updated = value.getUint32(16, true);
+        }
+      } else if (type === 12 && value.byteLength >= 12) {
+        const isMark = value.getUint8(2) === 1, index = value.getUint16(3, true);
+        const point = (isMark ? mapUserPoints : mapTrackPoints)[index];
+        if (point) Object.assign(point, { hdop: value.getUint16(5, true) / 100,
+          sats: value.getUint8(7), recordId: value.getUint16(8, true), cycleId: value.getUint16(10, true) });
+      } else if (type === 13 && value.byteLength >= 6) {
+        const isMark = value.getUint8(2) === 1, index = value.getUint16(3, true), length = value.getUint8(5);
+        const point = (isMark ? mapUserPoints : mapTrackPoints)[index];
+        if (point) point.status = decoder.decode(new Uint8Array(value.buffer, value.byteOffset + 6, Math.min(length, value.byteLength - 6)));
+      } else if (type === 20) {
+        journalText = '';
+        journalLoading = true;
+        element.journalStatus.textContent = 'загрузка…';
+      } else if (type === 21) {
+        journalText += decoder.decode(new Uint8Array(value.buffer, value.byteOffset + 2, value.byteLength - 2), { stream: true });
+      } else if (type === 22) {
+        journalText += decoder.decode();
+        journalLoading = false;
+        cacheSet('serviceLog', { text: journalText, updated: Date.now() });
+        renderJournal();
+      }
+    }
+
+    function renderStatus() {
+      element.gpsLamp.classList.toggle('on', state.gps);
+      element.recLamp.classList.toggle('on', state.recording);
+      element.sdLamp.classList.toggle('on', state.sd);
+      element.sdLamp.classList.toggle('error', !state.sd || state.sdWriteError || state.sdLowSpace);
+      element.sdLamp.textContent = state.sdWriteError ? 'SD ERR' : state.sdLowSpace ? 'SD FULL' : 'SD';
+      element.recordButton.textContent = state.recording ? 'Стоп записи' : 'Старт записи';
+      element.recordButton.classList.toggle('stop', state.recording);
+      element.recordButton.classList.toggle('primary', !state.recording);
+    }
+
+    function formatDuration(totalSeconds) {
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor(totalSeconds / 60) % 60;
+      const seconds = totalSeconds % 60;
+      return [hours, minutes, seconds].map(value => String(value).padStart(2, '0')).join(':');
+    }
+
+    function limitUtf8(text, maximumBytes) {
+      let value = String(text || '');
+      while (value && encoder.encode(value).byteLength > maximumBytes) value = value.slice(0, -1);
+      return value;
+    }
+
+    function canvasContext(canvas) {
+      const ratio = Math.min(window.devicePixelRatio || 1, 2);
+      const width = Math.max(260, canvas.clientWidth || 320);
+      const height = Math.max(180, canvas.clientHeight || 230);
+      const pixelWidth = Math.round(width * ratio);
+      const pixelHeight = Math.round(height * ratio);
+      if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+        canvas.width = pixelWidth;
+        canvas.height = pixelHeight;
+      }
+      const context = canvas.getContext('2d');
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      return { context, width, height };
+    }
+
+    function drawChartGrid(context, width, height, left = 20, right = 12, top = 12, bottom = 20) {
+      context.strokeStyle = '#173523';
+      context.lineWidth = 1;
+      for (let index = 0; index <= 4; index++) {
+        const x = left + (width - left - right) * index / 4;
+        const y = top + (height - top - bottom) * index / 4;
+        context.beginPath(); context.moveTo(x, top); context.lineTo(x, height - bottom); context.stroke();
+        context.beginPath(); context.moveTo(left, y); context.lineTo(width - right, y); context.stroke();
+      }
+    }
+
+    function drawEmptyChart(context, width, height, text) {
+      context.fillStyle = '#020403';
+      context.fillRect(0, 0, width, height);
+      drawChartGrid(context, width, height);
+      context.fillStyle = '#7f8982';
+      context.font = '12px ui-monospace, monospace';
+      context.textAlign = 'center';
+      context.fillText(text, width / 2, height / 2);
+    }
+
+    function renderTrackChart() {
+      const { context, width, height } = canvasContext(element.trackCanvas);
+      const points = trackPoints.filter(point => point && Number.isFinite(point.lat) && Number.isFinite(point.lon));
+      const marks = userPoints.filter(point => point && Number.isFinite(point.lat) && Number.isFinite(point.lon));
+      const allPoints = [...points, ...marks];
+      element.trackCount.textContent = `${points.length} трек · ${marks.length} меток`;
+      if (!allPoints.length) {
+        drawEmptyChart(context, width, height, trackHistoryLoading ? 'Загрузка точек…' : 'Нет точек трека');
+        element.trackBounds.textContent = trackHistoryLoading ? 'Получение истории по Bluetooth' : 'Начните запись трека';
+        return;
+      }
+
+      context.fillStyle = '#020403';
+      context.fillRect(0, 0, width, height);
+      const padding = 24;
+      drawChartGrid(context, width, height, padding, padding, padding, padding);
+      const meanLatRadians = allPoints.reduce((sum, point) => sum + point.lat, 0) / allPoints.length * Math.PI / 180;
+      const longitudeScale = Math.max(.1, Math.cos(meanLatRadians));
+      const projected = points.map(point => ({ x: point.lon * longitudeScale, y: point.lat }));
+      const projectedMarks = marks.map(point => ({ x: point.lon * longitudeScale, y: point.lat }));
+      const projectedAll = [...projected, ...projectedMarks];
+      const xs = projectedAll.map(point => point.x);
+      const ys = projectedAll.map(point => point.y);
+      const minX = Math.min(...xs), maxX = Math.max(...xs);
+      const minY = Math.min(...ys), maxY = Math.max(...ys);
+      const rangeX = Math.max(maxX - minX, 1e-7);
+      const rangeY = Math.max(maxY - minY, 1e-7);
+      const scale = Math.min((width - padding * 2) / rangeX, (height - padding * 2) / rangeY);
+      const usedWidth = rangeX * scale;
+      const usedHeight = rangeY * scale;
+      const offsetX = (width - usedWidth) / 2;
+      const offsetY = (height - usedHeight) / 2;
+      const mapPoint = point => ({
+        x: offsetX + (point.x - minX) * scale,
+        y: height - offsetY - (point.y - minY) * scale
+      });
+
+      if (projected.length) {
+        context.strokeStyle = 'rgba(67,209,62,.38)';
+        context.lineWidth = 1;
+        context.lineJoin = 'round';
+        context.lineCap = 'round';
+        context.beginPath();
+        projected.forEach((point, index) => {
+          const mapped = mapPoint(point);
+          if (index === 0) context.moveTo(mapped.x, mapped.y);
+          else context.lineTo(mapped.x, mapped.y);
+        });
+        context.stroke();
+
+        context.fillStyle = '#55e650';
+        projected.forEach(point => {
+          const mapped = mapPoint(point);
+          context.beginPath();
+          context.arc(mapped.x, mapped.y, 3, 0, Math.PI * 2);
+          context.fill();
+        });
+
+        const start = mapPoint(projected[0]);
+        const end = mapPoint(projected[projected.length - 1]);
+        context.fillStyle = '#58a6ff';
+        context.beginPath(); context.arc(start.x, start.y, 4, 0, Math.PI * 2); context.fill();
+        context.fillStyle = '#f1d20a';
+        context.beginPath(); context.arc(end.x, end.y, 5, 0, Math.PI * 2); context.fill();
+      }
+
+      projectedMarks.forEach(point => {
+        const mark = mapPoint(point);
+        context.fillStyle = '#ff2028';
+        context.beginPath(); context.arc(mark.x, mark.y, 6, 0, Math.PI * 2); context.fill();
+        context.strokeStyle = '#ffffff';
+        context.lineWidth = 2;
+        context.beginPath(); context.arc(mark.x, mark.y, 3, 0, Math.PI * 2); context.stroke();
+      });
+      const first = allPoints[0], last = allPoints[allPoints.length - 1];
+      element.trackBounds.textContent = `${first.lat.toFixed(5)}, ${first.lon.toFixed(5)} → ${last.lat.toFixed(5)}, ${last.lon.toFixed(5)}`;
+    }
+
+    function renderBatteryChart() {
+      const { context, width, height } = canvasContext(element.batteryCanvas);
+      const samples = batterySamples.filter(sample => sample && Number.isFinite(sample.voltage) && sample.voltage > 0);
+      const values = samples.map(sample => sample.voltage);
+      element.batteryCount.textContent = `${samples.length} / 1000`;
+      if (!samples.length) {
+        drawEmptyChart(context, width, height, batteryHistoryLoading ? 'Загрузка замеров…' : 'Нет замеров батареи');
+        element.batteryRange.textContent = batteryHistoryLoading ? 'Получение истории по Bluetooth' : 'Ожидание телеметрии';
+        return;
+      }
+
+      context.fillStyle = '#020403';
+      context.fillRect(0, 0, width, height);
+      const left = 38, right = 12, top = 14, bottom = 24;
+      drawChartGrid(context, width, height, left, right, top, bottom);
+      let minimum = Math.min(...values);
+      let maximum = Math.max(...values);
+      const padding = Math.max(.025, (maximum - minimum) * .18);
+      minimum = Math.max(2.8, minimum - padding);
+      maximum = Math.min(4.4, maximum + padding);
+      if (maximum - minimum < .05) { minimum -= .025; maximum += .025; }
+      const chartWidth = width - left - right;
+      const chartHeight = height - top - bottom;
+      const pointAt = (value, index) => ({
+        x: left + chartWidth * index / Math.max(1, samples.length - 1),
+        y: top + chartHeight * (maximum - value) / (maximum - minimum)
+      });
+
+      context.fillStyle = '#89928c';
+      context.font = '10px ui-monospace, monospace';
+      context.textAlign = 'right';
+      for (let index = 0; index <= 4; index++) {
+        const value = maximum - (maximum - minimum) * index / 4;
+        context.fillText(value.toFixed(2), left - 5, top + chartHeight * index / 4 + 3);
+      }
+
+      context.beginPath();
+      values.forEach((value, index) => {
+        const point = pointAt(value, index);
+        if (index === 0) context.moveTo(point.x, point.y);
+        else context.lineTo(point.x, point.y);
+      });
+      context.strokeStyle = 'rgba(74,207,76,.45)';
+      context.lineWidth = 1.2;
+      context.stroke();
+
+      const trend = values.map((_, index) => {
+        const start = Math.max(0, index - 9);
+        const window = values.slice(start, index + 1);
+        return window.reduce((sum, value) => sum + value, 0) / window.length;
+      });
+      context.beginPath();
+      trend.forEach((value, index) => {
+        const point = pointAt(value, index);
+        if (index === 0) context.moveTo(point.x, point.y);
+        else context.lineTo(point.x, point.y);
+      });
+      context.strokeStyle = '#f1d20a';
+      context.lineWidth = 2.4;
+      context.stroke();
+      const finalPoint = pointAt(values[values.length - 1], values.length - 1);
+      context.fillStyle = '#f5f5f7';
+      context.beginPath(); context.arc(finalPoint.x, finalPoint.y, 4, 0, Math.PI * 2); context.fill();
+      context.fillStyle = '#89928c';
+      context.textAlign = 'left';
+      const sampleLabel = sample => sample.epoch ? new Date(sample.epoch * 1000).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : `#${sample.id}`;
+      context.fillText(sampleLabel(samples[0]), left, height - 6);
+      context.textAlign = 'right';
+      context.fillText(sampleLabel(samples[samples.length - 1]), width - right, height - 6);
+      element.batteryRange.textContent = `мин ${Math.min(...values).toFixed(3)} В · сейчас ${values[values.length - 1].toFixed(3)} В · макс ${Math.max(...values).toFixed(3)} В · тренд 10 замеров`;
+      renderBatteryAnalytics();
+    }
+
+    function renderBatteryAnalytics() {
+      const samples = batterySamples.filter(sample => sample?.voltage > 0).sort((a, b) => (a.epoch || a.id) - (b.epoch || b.id));
+      if (!element.batteryAnalytics || !samples.length) return;
+      const last = samples[samples.length - 1], hourAgo = (last.epoch || 0) - 3600;
+      const hourSample = [...samples].reverse().find(sample => sample.epoch && sample.epoch <= hourAgo);
+      const drops = [];
+      let charges = 0, resets = 0;
+      for (let index = 1; index < samples.length; index++) {
+        const delta = samples[index - 1].voltage - samples[index].voltage;
+        if (delta >= 0 && delta < .2) drops.push(delta);
+        if (-delta > .08) charges++;
+        if (samples[index].cycleId && samples[index - 1].cycleId && samples[index].cycleId < samples[index - 1].cycleId) resets++;
+      }
+      const averageDrop = drops.length ? drops.reduce((sum, value) => sum + value, 0) / drops.length : 0;
+      const remainingCycles = averageDrop > .0001 ? Math.max(0, Math.floor((last.voltage - 3.3) / averageDrop)) : null;
+      const gpsWaits = [...journalText.matchAll(/gps_wait=(\d+)/g)].map(match => Number(match[1]));
+      const averageGpsWait = gpsWaits.length ? gpsWaits.reduce((sum, value) => sum + value, 0) / gpsWaits.length : null;
+      const waitsByCycle = new Map();
+      journalText.split(/\r?\n/).forEach(line => {
+        const cells = line.split(','), match = line.match(/gps_wait=(\d+)/);
+        if (cells.length >= 4 && match) waitsByCycle.set(Number(cells[2]), Number(match[1]));
+      });
+      const pairs = [];
+      for (let index = 1; index < samples.length; index++) {
+        const wait = waitsByCycle.get(Number(samples[index].cycleId));
+        const drop = samples[index - 1].voltage - samples[index].voltage;
+        if (Number.isFinite(wait) && drop >= 0 && drop < .2) pairs.push([wait, drop]);
+      }
+      let correlation = null;
+      if (pairs.length >= 3) {
+        const meanX = pairs.reduce((sum, pair) => sum + pair[0], 0) / pairs.length;
+        const meanY = pairs.reduce((sum, pair) => sum + pair[1], 0) / pairs.length;
+        const numerator = pairs.reduce((sum, pair) => sum + (pair[0] - meanX) * (pair[1] - meanY), 0);
+        const denominator = Math.sqrt(pairs.reduce((sum, pair) => sum + (pair[0] - meanX) ** 2, 0) * pairs.reduce((sum, pair) => sum + (pair[1] - meanY) ** 2, 0));
+        if (denominator) correlation = numerator / denominator;
+      }
+      const values = [
+        ['Падение за час', hourSample ? `${(hourSample.voltage - last.voltage).toFixed(3)} В` : 'мало данных'],
+        ['Расход за цикл', drops.length ? `${(averageDrop * 1000).toFixed(1)} мВ` : 'мало данных'],
+        ['Осталось циклов', remainingCycles == null ? 'мало данных' : `≈ ${remainingCycles}`],
+        ['Зарядки / сбросы', `${charges} / ${resets}`],
+        ['Среднее ожидание GPS', averageGpsWait == null ? 'нет журнала' : `${averageGpsWait.toFixed(0)} с`],
+        ['GPS / расход', correlation == null ? 'мало пар' : `r = ${correlation.toFixed(2)} · ${pairs.length} циклов`]
+      ];
+      element.batteryAnalytics.innerHTML = values.map(([label, value]) => `<div class="track-stat"><span>${label}</span><strong>${value}</strong></div>`).join('');
+    }
+
+    function scheduleCharts(updateTrack = true, updateBattery = true) {
+      if (updateTrack) trackChartDirty = true;
+      if (updateBattery) batteryChartDirty = true;
+      if (chartFramePending) return;
+      chartFramePending = true;
+      requestAnimationFrame(() => {
+        chartFramePending = false;
+        const renderTrack = trackChartDirty;
+        const renderBattery = batteryChartDirty;
+        trackChartDirty = false;
+        batteryChartDirty = false;
+        if (renderTrack) renderTrackChart();
+        if (renderBattery) renderBatteryChart();
+      });
+    }
+
+    function appendLiveTrack(latitude, longitude, altitude) {
+      if (trackHistoryLoading || !state.gps || !state.recording || (!latitude && !longitude)) return;
+      const previous = trackPoints[trackPoints.length - 1];
+      if (previous && Math.abs(previous.lat - latitude) < 1e-7 && Math.abs(previous.lon - longitude) < 1e-7) return;
+      const point = { lat: latitude, lon: longitude, altitude };
+      trackPoints.push(point);
+      if (trackPoints.length > 100) trackPoints.shift();
+      saveCompactCache();
+      recordPeriodPoint(point);
+      scheduleCharts(true, false);
+    }
+
+    function decodeHistory(value) {
+      if (value.byteLength < 4 || value.getUint8(0) !== 1) return;
+      const type = value.getUint8(1);
+      if (type === 1) {
+        trackPoints = new Array(value.getUint8(2));
+        trackHistoryLoading = true;
+        scheduleCharts(true, false);
+      } else if (type === 2 && value.byteLength >= 14) {
+        const index = value.getUint8(2);
+        trackPoints[index] = {
+          lat: value.getInt32(4, true) / 1e7,
+          lon: value.getInt32(8, true) / 1e7,
+          altitude: value.getInt16(12, true)
+        };
+        scheduleCharts(true, false);
+      } else if (type === 3) {
+        incomingBatterySamples = new Array(value.getUint8(2));
+        batteryHistoryFormat = value.byteLength >= 4 ? value.getUint8(3) : 1;
+        batteryHistoryLoading = true;
+        scheduleCharts(false, true);
+      } else if (type === 4) {
+        const start = value.getUint8(2);
+        const count = value.getUint8(3);
+        const recordSize = batteryHistoryFormat >= 3 ? 12 : batteryHistoryFormat >= 2 ? 6 : 2;
+        for (let index = 0; index < count && 4 + (index + 1) * recordSize <= value.byteLength; index++) {
+          const offset = 4 + index * recordSize;
+          incomingBatterySamples[start + index] = batteryHistoryFormat >= 3
+            ? { id: value.getUint32(offset, true), voltage: value.getUint16(offset + 4, true) / 1000,
+                epoch: value.getUint32(offset + 6, true), cycleId: value.getUint16(offset + 10, true) }
+            : batteryHistoryFormat >= 2
+            ? { id: value.getUint32(offset, true), voltage: value.getUint16(offset + 4, true) / 1000 }
+            : { id: start + index + 1, voltage: value.getUint16(4 + index * 2, true) / 1000, legacy: true };
+        }
+        scheduleCharts(false, true);
+      } else if (type === 6) {
+        userPoints = new Array(value.getUint8(2));
+        scheduleCharts(true, false);
+      } else if (type === 7 && value.byteLength >= 14) {
+        const index = value.getUint8(2);
+        userPoints[index] = {
+          lat: value.getInt32(4, true) / 1e7,
+          lon: value.getInt32(8, true) / 1e7,
+          altitude: value.getInt16(12, true)
+        };
+        scheduleCharts(true, false);
+      } else if (type === 5) {
+        trackPoints = trackPoints.filter(Boolean).slice(-100);
+        userPoints = userPoints.filter(Boolean).slice(-100);
+        const mergedBattery = new Map(batterySamples.filter(sample => sample && Number.isFinite(sample.voltage))
+          .map(sample => [sample.id, sample]));
+        incomingBatterySamples.filter(Boolean).forEach(sample => mergedBattery.set(sample.id, sample));
+        batterySamples = [...mergedBattery.values()].sort((a, b) => Number(a.id) - Number(b.id)).slice(-1000);
+        incomingBatterySamples = [];
+        trackHistoryLoading = false;
+        batteryHistoryLoading = false;
+        historyRequestPending = false;
+        compactCacheMeta = { route: state.route, pointCount: state.pointCount,
+          batterySequence: Math.max(state.batterySequence || 0, ...batterySamples.map(sample => Number(sample.id) || 0)) };
+        saveCompactCache();
+        setLog(`История: ${trackPoints.length} точек, ${userPoints.length} меток, ${batterySamples.length} замеров.`, 'ok');
+        scheduleCharts(true, true);
+      }
+    }
+
+    function decodeTelemetry(value) {
+      if (value.byteLength < 20 || value.getUint8(0) !== 1) return;
+      const flags = value.getUint8(1);
+      state.gps = Boolean(flags & 0x01);
+      state.recording = Boolean(flags & 0x02);
+      state.sd = Boolean(flags & 0x04);
+      state.altitudeValid = Boolean(flags & 0x08);
+      state.sdWriteError = Boolean(flags & 0x10);
+      state.sdLowSpace = Boolean(flags & 0x20);
+      state.sdTailRepaired = Boolean(flags & 0x40);
+      state.usbConnected = Boolean(flags & 0x80);
+      const distanceKm = value.getUint32(2, true) / 1000;
+      const altitude = value.getInt16(6, true);
+      state.currentAltitude = altitude;
+      const batteryMv = value.getUint16(8, true);
+      const batteryPercent = value.getUint8(10);
+      const satellites = value.getUint8(11);
+      state.satellites = satellites;
+      const speed = value.getUint16(12, true) / 10;
+      state.speed = speed;
+      const hdopRaw = value.getUint16(14, true);
+      state.hdop = hdopRaw / 100;
+      const route = value.getUint16(16, true);
+      state.route = route;
+      const points = value.getUint16(18, true);
+      state.pointCount = points;
+
+      element.distance.innerHTML = `${distanceKm.toFixed(distanceKm < 1000 ? 2 : 1)}<span>км</span>`;
+      element.altitude.innerHTML = `${state.altitudeValid ? altitude : '---'} <small>м</small>`;
+      element.speed.innerHTML = `${speed.toFixed(1)} <small>км/ч</small>`;
+      element.batteryTop.textContent = `${batteryPercent}%`;
+      element.batteryTop.title = `${(batteryMv / 1000).toFixed(2)} В`;
+      element.satellites.textContent = `${satellites} / ${hdopRaw ? (hdopRaw / 100).toFixed(2) : '--'}`;
+      element.route.textContent = `${String(route).padStart(3, '0')} / ${points}`;
+      element.sdHealth.textContent = !state.sd ? 'нет карты' : state.sdWriteError ? 'ошибка записи' :
+        state.sdLowSpace ? 'мало места' : state.sdTailRepaired ? 'файл восстановлен' : 'готова';
+      element.usbCycle.textContent = `${state.usbConnected ? 'USB · без сна' : 'USB нет'} · #${state.cycleId || '—'}`;
+      saveTelemetryCache({ distanceKm, altitude, altitudeValid: state.altitudeValid, speed, batteryMv,
+        batteryPercent, satellites, hdopRaw, route, points });
+      renderStatus();
+      trySendPendingMark();
+      syncCurrentMapIfNeeded();
+    }
+
+    function decodeNavigation(value) {
+      if (value.byteLength < 20) return;
+      const latitude = value.getInt32(0, true) / 1e7;
+      const longitude = value.getInt32(4, true) / 1e7;
+      state.latitude = latitude;
+      state.longitude = longitude;
+      const deltaAltitude = value.getInt16(8, true);
+      const logSeconds = value.getUint32(12, true);
+      element.latitude.textContent = state.gps ? latitude.toFixed(6) : '—';
+      element.longitude.textContent = state.gps ? longitude.toFixed(6) : '—';
+      element.deltaAltitude.innerHTML = `${state.altitudeValid ? (deltaAltitude >= 0 ? '+' : '') + deltaAltitude : '---'} <small>м</small>`;
+      element.logTime.textContent = formatDuration(logSeconds);
+      appendLiveTrack(latitude, longitude, state.altitudeValid ? state.currentAltitude : 0);
+      appendLiveMapPoint(latitude, longitude, state.altitudeValid ? state.currentAltitude : 0);
+      trySendPendingMark();
+    }
+
+    function decodeSettings(value) {
+      if (value.byteLength < 6) return;
+      const version = value.getUint8(0);
+      if (version < 1 || version > 5) return;
+      const values = { gpsTimeout: value.getUint16(1, true), minSatellites: value.getUint8(3),
+        maxHdop: Number((value.getUint16(4, true) / 100).toFixed(1)), sleepTime: 60,
+        minPoints: 1, screenEnabled: true, bleEnabled: true, filterEnabled: false, sleepWhileBle: false };
+      if (version >= 2 && value.byteLength >= 11) {
+        values.sleepTime = value.getUint32(6, true);
+        const flags = value.getUint8(10);
+        values.screenEnabled = Boolean(flags & 0x01);
+        values.bleEnabled = Boolean(flags & 0x02);
+      }
+      if (version >= 3 && value.byteLength >= 12) values.minPoints = value.getUint8(11);
+      if (version >= 4 && value.byteLength >= 13) values.filterEnabled = Boolean(value.getUint8(12));
+      if (version >= 5 && value.byteLength >= 14) values.sleepWhileBle = Boolean(value.getUint8(13));
+      const draft = getSettingsDraft();
+      lastDeviceSettings = values;
+      if (!draft?.dirty) {
+        applySettingsForm(values);
+        saveSettingsDraft(values, false);
+      }
+      return values;
+    }
+
+    function decodeCycleStatus(value) {
+      if (value.byteLength < 16 || value.getUint8(0) !== 1) return;
+      const states = ['—', 'Ожидание GPS', 'Передача трека', 'Телефон подключён', 'Ожидание Bluetooth', 'Подготовка ко сну', 'Устройство засыпает', 'USB подключён · сон запрещён'];
+      const wakes = ['—', 'Таймер', 'Кнопка', 'Питание / сброс'];
+      const stateCode = value.getUint8(1);
+      if (value.getUint8(2) === 3 && !Boolean(value.getUint8(3) & 0x10)) lastAcknowledgedCycle = 0;
+      state.cycleComplete = Boolean(value.getUint8(3) & 0x08);
+      state.cycleAcknowledged = Boolean(value.getUint8(3) & 0x10);
+      state.usbConnected = Boolean(value.getUint8(3) & 0x20) || state.usbConnected;
+      element.cycleState.textContent = states[stateCode] || '—';
+      element.wakeReason.textContent = wakes[value.getUint8(2)] || '—';
+      element.cyclePoints.textContent = `${value.getUint8(4)} / ${value.getUint8(5)}`;
+      element.cycleGpsTime.textContent = `${value.getUint16(6, true)} / ${value.getUint16(8, true)} с`;
+      element.cycleSleep.textContent = `${value.getUint32(10, true)} с`;
+      state.cycleId = value.getUint16(14, true);
+      element.usbCycle.textContent = `${state.usbConnected ? 'USB · без сна' : 'USB нет'} · цикл #${state.cycleId}${state.cycleAcknowledged ? ' ✓' : ''}`;
+      if (value.byteLength >= 20) {
+        state.batterySequence = value.getUint32(16, true);
+        if (state.connected) requestHistoryIfNeeded();
+      }
+      if (state.connected && state.cycleComplete) acknowledgeCurrentCycle();
+      if (stateCode === 6 && !expectedSleepUntil) expectDeviceSleep();
+    }
+
+    async function acknowledgeCurrentCycle() {
+      if (!state.connected || !state.cycleComplete || !state.cycleId || state.cycleAcknowledged ||
+          lastAcknowledgedCycle === state.cycleId) return;
+      lastAcknowledgedCycle = state.cycleId;
+      try { await writeRawCommand(`ack=${state.cycleId}`); }
+      catch (error) { lastAcknowledgedCycle = 0; console.warn('Cycle ACK failed', error); }
+    }
+
+    async function syncCurrentMapIfNeeded() {
+      if (!state.connected || mapLoading || !loadedMapIsCurrent || loadedMapRoute !== state.route ||
+          !mapTrackPoints.length || state.pointCount <= mapTrackPoints.length) return;
+      mapLoading = true;
+      element.mapStatus.textContent = `Синхронизация ${state.pointCount - mapTrackPoints.length} новых точек с SD…`;
+      try { await writeRawCommand(`sync=${state.route}|${mapTrackPoints.length}|${mapUserPoints.length}`); }
+      catch (error) { mapLoading = false; setLog(`Синхронизация трека: ${error.message}`, 'error'); }
+    }
+
+    async function requestHistoryIfNeeded(force = false) {
+      if (!state.connected || historyRequestPending || trackHistoryLoading || batteryHistoryLoading) return;
+      const needsTrack = !trackPoints.length || compactCacheMeta.route !== state.route ||
+        compactCacheMeta.pointCount !== state.pointCount;
+      const needsBattery = !batterySamples.length || compactCacheMeta.batterySequence < state.batterySequence;
+      if (!force && !state.cycleComplete && trackPoints.length && batterySamples.length) return;
+      if (!force && !needsTrack && !needsBattery) return;
+      historyRequestPending = true;
+      try { await writeRawCommand('history'); }
+      catch (error) { historyRequestPending = false; throw error; }
+    }
+
+    async function trySendPendingMark() {
+      if (!state.connected || pendingMarkSending || !state.gps || (!state.latitude && !state.longitude)) return;
+      const queue = getPendingMarks();
+      if (!queue.length) return;
+      activePendingMark = { ...queue[0], lat: state.latitude, lon: state.longitude,
+        altitude: state.currentAltitude };
+      pendingMarkDetails = activePendingMark;
+      pendingMarkSending = true;
+      try {
+        await writeRawCommand(`mark=${activePendingMark.name}|${activePendingMark.comment}`);
+        setLog('Первая GPS-точка получена. Сохраняю отложенную метку…');
+      } catch (error) {
+        pendingMarkSending = false;
+        activePendingMark = null;
+        setLog(`Отложенная точка: ${error.message}`, 'error');
+      }
+    }
+
+    function enqueueGatt(operation) {
+      const result = gattQueue.then(operation, operation);
+      gattQueue = result.catch(() => {});
+      return result;
+    }
+
+    async function writeRawCommand(command) {
+      if (!state.connected || !characteristic.command) throw new Error('Bluetooth не подключён');
+      const payload = encoder.encode(command);
+      if (payload.byteLength > 60) throw new Error('Слишком длинная команда');
+      return enqueueGatt(async () => {
+        if (characteristic.command.writeValueWithResponse) {
+          await characteristic.command.writeValueWithResponse(payload);
+        } else {
+          await characteristic.command.writeValue(payload);
+        }
+      });
+    }
+
+    async function readInitialValues() {
+      decodeTelemetry(await characteristic.telemetry.readValue());
+      decodeNavigation(await characteristic.nav.readValue());
+      decodeSettings(await characteristic.settings.readValue());
+    }
+
+    function settingsError(values) {
+      if (values.gpsTimeout < 30 || values.gpsTimeout > 3600 || values.minSatellites < 1 ||
+          values.minSatellites > 20 || values.maxHdop < .5 || values.maxHdop > 20 ||
+          values.sleepTime < 10 || values.sleepTime > 86400 || values.minPoints < 1 ||
+          values.minPoints > 100) return 'Проверьте диапазоны настроек.';
+      if (values.sleepWhileBle && !values.bleEnabled) {
+        return 'Для сна с подключённым телефоном включите Bluetooth при пробуждении.';
+      }
+      return '';
+    }
+
+    async function flushPendingSettings() {
+      const draft = getSettingsDraft();
+      if (!draft?.dirty) return false;
+      const values = draft.values;
+      const validationError = settingsError(values);
+      if (validationError) throw new Error(validationError);
+      await writeRawCommand(`gpsto=${values.gpsTimeout}`);
+      await writeRawCommand(`sats=${values.minSatellites}`);
+      await writeRawCommand(`hdop=${Math.round(values.maxHdop * 100)}`);
+      await writeRawCommand(`sleep=${values.sleepTime}`);
+      await writeRawCommand(`screen=${values.screenEnabled ? 1 : 0}`);
+      await writeRawCommand(`ble=${values.bleEnabled ? 1 : 0}`);
+      await writeRawCommand(`minpts=${values.minPoints}`);
+      await writeRawCommand(`filter=${values.filterEnabled ? 1 : 0}`);
+      await writeRawCommand(`sleepbt=${values.sleepWhileBle ? 1 : 0}`);
+      await new Promise(resolve => setTimeout(resolve, 120));
+      const confirmed = decodeSettings(await characteristic.settings.readValue());
+      const matches = confirmed && confirmed.gpsTimeout === values.gpsTimeout &&
+        confirmed.minSatellites === values.minSatellites && Math.abs(confirmed.maxHdop - values.maxHdop) < .01 &&
+        confirmed.sleepTime === values.sleepTime && confirmed.minPoints === values.minPoints &&
+        confirmed.screenEnabled === values.screenEnabled && confirmed.bleEnabled === values.bleEnabled &&
+        confirmed.filterEnabled === values.filterEnabled && confirmed.sleepWhileBle === values.sleepWhileBle;
+      if (!matches) throw new Error('устройство не подтвердило настройки');
+      saveSettingsDraft(values, false);
+      setLog('Отложенные настройки отправлены трекеру.', 'ok');
+      return true;
+    }
+
+    async function connectGatt(isReconnect = false) {
+      if (!device || connecting) return;
+      connecting = true;
+      element.connectButton.disabled = true;
+      element.connectionText.textContent = isReconnect ? 'Переподключение…' : `Подключение к ${device.name || 'устройству'}…`;
+      try {
+        server = await device.gatt.connect();
+        const service = await server.getPrimaryService(UUID.service);
+        characteristic.telemetry = await service.getCharacteristic(UUID.telemetry);
+        characteristic.nav = await service.getCharacteristic(UUID.nav);
+        characteristic.settings = await service.getCharacteristic(UUID.settings);
+        characteristic.command = await service.getCharacteristic(UUID.command);
+        characteristic.response = await service.getCharacteristic(UUID.response);
+        characteristic.history = await service.getCharacteristic(UUID.history);
+        characteristic.trackTransfer = await service.getCharacteristic(UUID.trackTransfer);
+        characteristic.cycleStatus = await service.getCharacteristic(UUID.cycleStatus);
+
+        await characteristic.telemetry.startNotifications();
+        characteristic.telemetry.addEventListener('characteristicvaluechanged', event => decodeTelemetry(event.target.value));
+        await characteristic.nav.startNotifications();
+        characteristic.nav.addEventListener('characteristicvaluechanged', event => decodeNavigation(event.target.value));
+        await characteristic.response.startNotifications();
+        characteristic.response.addEventListener('characteristicvaluechanged', event => {
+          const message = decoder.decode(event.target.value);
+          if (message.startsWith('SLEEPING')) expectDeviceSleep();
+          if (message.startsWith('OK MARK') && activePendingMark) {
+            const savedMark = activePendingMark;
+            const queue = getPendingMarks();
+            if (queue[0]?.id === savedMark.id) queue.shift();
+            savePendingMarks(queue);
+            userPoints.push({ lat: savedMark.lat, lon: savedMark.lon, altitude: savedMark.altitude });
+            if (userPoints.length > 100) userPoints.shift();
+            saveCompactCache();
+            scheduleCharts(true, false);
+            appendLiveMapMark(savedMark.lat, savedMark.lon, savedMark.altitude, savedMark);
+            pendingMarkDetails = null;
+            activePendingMark = null;
+            pendingMarkSending = false;
+            setTimeout(trySendPendingMark, 0);
+          } else if (message.startsWith('ERR') && activePendingMark) {
+            pendingMarkSending = false;
+            activePendingMark = null;
+            pendingMarkDetails = null;
+          }
+          setLog(message, message.startsWith('ERR') ? 'error' : 'ok');
+        });
+        await characteristic.history.startNotifications();
+        characteristic.history.addEventListener('characteristicvaluechanged', event => decodeHistory(event.target.value));
+        await characteristic.trackTransfer.startNotifications();
+        characteristic.trackTransfer.addEventListener('characteristicvaluechanged', event => decodeTrackTransfer(event.target.value));
+        await characteristic.cycleStatus.startNotifications();
+        characteristic.cycleStatus.addEventListener('characteristicvaluechanged', event => decodeCycleStatus(event.target.value));
+        decodeCycleStatus(await characteristic.cycleStatus.readValue());
+        await readInitialValues();
+
+        state.connected = true;
+        expectedSleepUntil = 0;
+        if (sleepCountdownTimer) { clearInterval(sleepCountdownTimer); sleepCountdownTimer = null; }
+        reconnecting = false;
+        setControls(true);
+        element.connectButton.textContent = 'Отключить';
+        element.connectButton.classList.add('connected');
+        element.connectionText.textContent = `Подключено: ${device.name || 'C6 Tracker'}`;
+        setLog('Телеметрия подключена.', 'ok');
+        renderStatus();
+        try {
+          await flushPendingSettings();
+          await requestHistoryIfNeeded();
+        } catch (historyError) {
+          setLog(`Подключено, но очередь или история не обработана: ${historyError.message}`, 'error');
+        }
+        trySendPendingMark();
+        acknowledgeCurrentCycle();
+        syncCurrentMapIfNeeded();
+        renderQueueState();
+      } finally {
+        connecting = false;
+        element.connectButton.disabled = false;
+      }
+    }
+
+    async function requestDevice() {
+      manualDisconnect = false;
+      device = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: [UUID.service, 'battery_service']
+      });
+      device.addEventListener('gattserverdisconnected', handleDisconnect);
+      await connectGatt(false);
+    }
+
+    async function reconnectLoop(force = false) {
+      if (reconnecting || (!autoReconnectEnabled && !force) || manualDisconnect || !device) return;
+      reconnecting = true;
+      let attempt = 0;
+      while ((autoReconnectEnabled || force) && !manualDisconnect && device && !state.connected) {
+        attempt++;
+        element.connectionText.textContent = 'Ожидание C6 Tracker…';
+        setLog(`Автоподключение: попытка ${attempt}. Устройство может спать.`);
+        try {
+          await connectGatt(true);
+          if (state.connected) break;
+        } catch (error) {
+          console.warn('Reconnect failed', error);
+        }
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
+      reconnecting = false;
+    }
+
+    async function restoreKnownDevice() {
+      if (!autoReconnectEnabled || !navigator.bluetooth.getDevices) return;
+      try {
+        const devices = await navigator.bluetooth.getDevices();
+        const known = devices.find(candidate => candidate.name === 'C6 Tracker') || devices[0];
+        if (!known) {
+          setLog('Для автоподключения один раз выберите C6 Tracker вручную.');
+          return;
+        }
+        device = known;
+        manualDisconnect = false;
+        device.addEventListener('gattserverdisconnected', handleDisconnect);
+        reconnectLoop();
+      } catch (error) {
+        setLog(`Не удалось восстановить Bluetooth-разрешение: ${error.message}`, 'error');
+      }
+    }
+
+    async function handleDisconnect() {
+      state.connected = false;
+      state.gps = false;
+      state.recording = false;
+      state.sd = false;
+      trackHistoryLoading = false;
+      batteryHistoryLoading = false;
+      historyRequestPending = false;
+      pendingMarkSending = false;
+      activePendingMark = null;
+      characteristic = {};
+      gattQueue = Promise.resolve();
+      setControls(false);
+      renderStatus();
+      element.connectButton.textContent = 'Подключить';
+      element.connectButton.classList.remove('connected');
+      element.connectionText.textContent = 'Bluetooth отключён';
+      if (expectedSleepUntil && waitForDeviceWake()) return;
+      if (!manualDisconnect && autoReconnectEnabled) reconnectLoop();
+    }
+
+    function disconnect() {
+      manualDisconnect = true;
+      reconnecting = false;
+      if (device?.gatt?.connected) device.gatt.disconnect();
+      else handleDisconnect();
+      setLog('Отключено пользователем.');
+    }
+
+    element.connectButton.addEventListener('click', async () => {
+      try {
+        if (state.connected || device?.gatt?.connected) disconnect();
+        else if (device) {
+          manualDisconnect = false;
+          await connectGatt(false);
+        } else await requestDevice();
+      } catch (error) {
+        const cancelled = error.name === 'NotFoundError';
+        setLog(cancelled ? 'Выбор устройства отменён.' : `Ошибка подключения: ${error.message}`, cancelled ? '' : 'error');
+        element.connectionText.textContent = 'Bluetooth не подключён';
+      }
+    });
+
+    element.autoReconnect.checked = autoReconnectEnabled;
+    element.autoReconnect.addEventListener('change', () => {
+      autoReconnectEnabled = element.autoReconnect.checked;
+      localStorage.setItem('c6TrackerAutoReconnect', autoReconnectEnabled ? '1' : '0');
+      if (autoReconnectEnabled) {
+        manualDisconnect = false;
+        if (device) reconnectLoop();
+        else restoreKnownDevice();
+      } else {
+        reconnecting = false;
+        setLog('Автоподключение выключено.');
+      }
+    });
+
+    element.recordButton.addEventListener('click', async () => {
+      try {
+        await writeRawCommand(state.recording ? 'rec=0' : 'rec=1');
+        setLog('Команда записи отправлена.');
+      } catch (error) { setLog(error.message, 'error'); }
+    });
+
+    element.markButton.addEventListener('click', async () => {
+      const enteredName = prompt('Название точки:', '');
+      if (enteredName === null) return;
+      const enteredComment = prompt('Комментарий (необязательно):', '');
+      if (enteredComment === null) return;
+      const name = limitUtf8(enteredName.replace(/[|\r\n]/g, ' ').trim(), 15);
+      const comment = limitUtf8(enteredComment.replace(/[|\r\n]/g, ' ').trim(), 15);
+      const queue = getPendingMarks();
+      queue.push({ id: Date.now(), name, comment });
+      savePendingMarks(queue);
+      setLog('Точка сохранена локально и будет поставлена по первой GPS-координате.', 'ok');
+      trySendPendingMark();
+    });
+
+    element.clearPendingMarks.addEventListener('click', () => {
+      if (!getPendingMarks().length) return;
+      if (!confirm('Отменить все точки, ожидающие GPS?')) return;
+      savePendingMarks([]);
+      activePendingMark = null;
+      pendingMarkSending = false;
+      setLog('Очередь пользовательских точек очищена.');
+    });
+
+    element.clearPendingSettings.addEventListener('click', () => {
+      const draft = getSettingsDraft();
+      if (!draft?.dirty || !confirm('Отменить настройки, ожидающие отправки?')) return;
+      if (lastDeviceSettings) {
+        applySettingsForm(lastDeviceSettings);
+        saveSettingsDraft(lastDeviceSettings, false);
+      } else {
+        localStorage.removeItem(SETTINGS_DRAFT_KEY);
+        element.saveSettings.classList.remove('pending');
+        updateSettingsButton();
+        renderQueueState();
+      }
+      setLog('Отложенные настройки отменены.');
+    });
+
+    element.newButton.addEventListener('click', async () => {
+      if (!confirm('Создать новый трек и обнулить расстояние?')) return;
+      try {
+        await writeRawCommand('new');
+        trackPoints = [];
+        userPoints = [];
+        trackHistoryLoading = false;
+        compactCacheMeta = { route: state.route, pointCount: 0, batterySequence: compactCacheMeta.batterySequence };
+        saveCompactCache();
+        scheduleCharts(true, false);
+        setLog('Создание нового трека…');
+      } catch (error) { setLog(error.message, 'error'); }
+    });
+
+    async function requestTrackList() {
+      if (!state.connected) return;
+      availableTracks = [];
+      element.trackList.textContent = 'Получение списка…';
+      await writeRawCommand('tracks');
+    }
+
+    const BUILTIN_PROFILES = {
+      'Пешком': { gpsTimeout: 180, sleepTime: 120, minSatellites: 4, maxHdop: 5, minPoints: 1, screenEnabled: false, bleEnabled: true, filterEnabled: false, sleepWhileBle: true },
+      'Авто': { gpsTimeout: 180, sleepTime: 10, minSatellites: 4, maxHdop: 5, minPoints: 1, screenEnabled: false, bleEnabled: true, filterEnabled: true, sleepWhileBle: true },
+      'Эконом': { gpsTimeout: 60, sleepTime: 3600, minSatellites: 4, maxHdop: 8, minPoints: 1, screenEnabled: false, bleEnabled: true, filterEnabled: false, sleepWhileBle: false }
+    };
+
+    function customProfiles() {
+      try { return JSON.parse(localStorage.getItem(PROFILES_KEY) || '{}'); } catch { return {}; }
+    }
+
+    function renderProfiles(selected = '') {
+      const custom = customProfiles();
+      element.profileSelect.innerHTML = '<optgroup label="Готовые">' + Object.keys(BUILTIN_PROFILES).map(name => `<option value="builtin:${name}">${name}</option>`).join('') +
+        '</optgroup><optgroup label="Свои">' + Object.keys(custom).map(name => `<option value="custom:${name}">${name}</option>`).join('') + '</optgroup>';
+      if (selected) element.profileSelect.value = selected;
+      element.deleteProfileButton.disabled = !element.profileSelect.value.startsWith('custom:');
+    }
+
+    function chosenProfile() {
+      const [type, name] = element.profileSelect.value.split(':');
+      return type === 'builtin' ? BUILTIN_PROFILES[name] : customProfiles()[name];
+    }
+
+    function parseReferenceRoute(text, filename) {
+      if (/\.gpx$/i.test(filename) || text.trim().startsWith('<')) {
+        const xml = new DOMParser().parseFromString(text, 'application/xml');
+        return [...xml.querySelectorAll('trkpt, rtept')].map(node => ({ lat: Number(node.getAttribute('lat')), lon: Number(node.getAttribute('lon')) })).filter(point => Number.isFinite(point.lat) && Number.isFinite(point.lon));
+      }
+      const json = JSON.parse(text), coordinates = [];
+      const visit = object => {
+        if (!object) return;
+        if (object.type === 'FeatureCollection') object.features.forEach(visit);
+        else if (object.type === 'Feature') visit(object.geometry);
+        else if (object.type === 'LineString') object.coordinates.forEach(item => coordinates.push({ lon: Number(item[0]), lat: Number(item[1]) }));
+        else if (object.type === 'MultiLineString') object.coordinates.flat().forEach(item => coordinates.push({ lon: Number(item[0]), lat: Number(item[1]) }));
+      };
+      visit(json);
+      return coordinates.filter(point => Number.isFinite(point.lat) && Number.isFinite(point.lon));
+    }
+
+    async function setReferenceRoute(points, fit = true) {
+      referenceRoute = points || [];
+      rebuildReferenceDistance();
+      ensureMap();
+      mapReferenceLine.setLatLngs(referenceRoute.map(point => [point.lat, point.lon]));
+      if (fit && referenceRoute.length) trackMap.fitBounds(mapReferenceLine.getBounds().pad(.06), { maxZoom: 17 });
+      await cacheSet('referenceRoute', referenceRoute);
+      updateRouteCounters();
+    }
+
+    function renderJournal() {
+      const lines = journalText.trim().split(/\r?\n/).filter(Boolean);
+      element.journalStatus.textContent = `${Math.max(0, lines.length - 1)} событий`;
+      element.journalList.textContent = lines.slice(-300).reverse().join('\n');
+    }
+
+    function downloadBlob(content, name, type) {
+      const url = URL.createObjectURL(new Blob([content], { type })), link = document.createElement('a');
+      link.href = url; link.download = name; document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    async function refreshStorageInfo() {
+      const estimate = navigator.storage?.estimate ? await navigator.storage.estimate() : {};
+      const persisted = navigator.storage?.persisted ? await navigator.storage.persisted() : false;
+      const keys = await cacheKeys(), trackKeys = keys.filter(key => String(key).startsWith('mapTrack:'));
+      element.storageUsage.textContent = estimate.usage == null ? 'недоступно' : `${(estimate.usage / 1048576).toFixed(1)} МБ`;
+      element.storageInfo.textContent = `Ключей кэша: ${keys.length}\nТреков: ${trackKeys.length}\nЗащита от автоматической очистки: ${persisted ? 'да' : 'нет'}`;
+      element.cacheTrackSelect.innerHTML = trackKeys.map(key => `<option value="${key}">Трек ${key.split(':')[1]}</option>`).join('');
+      if (!trackKeys.length) element.cacheTrackSelect.innerHTML = '<option value="">Нет треков</option>';
+      renderBatteryAnalytics();
+    }
+
+    function showTab(name) {
+      const tabs = ['telemetry', 'map', 'journal', 'data'];
+      tabs.forEach(tab => {
+        element[`${tab}Tab`].hidden = tab !== name;
+        element[`${tab}TabButton`].classList.toggle('active', tab === name);
+      });
+      if (name === 'map') {
+        ensureMap();
+        setTimeout(() => trackMap?.invalidateSize(), 0);
+      }
+      if (name === 'data') refreshStorageInfo();
+    }
+
+    element.telemetryTabButton.addEventListener('click', () => showTab('telemetry'));
+    element.mapTabButton.addEventListener('click', async () => {
+      showTab('map');
+      if (state.connected && !availableTracks.length) {
+        try { await requestTrackList(); } catch (error) { setLog(error.message, 'error'); }
+      }
+    });
+    element.journalTabButton.addEventListener('click', () => showTab('journal'));
+    element.dataTabButton.addEventListener('click', () => showTab('data'));
+
+    element.tracksButton.addEventListener('click', async () => {
+      showTab('map');
+      try { await requestTrackList(); } catch (error) { setLog(error.message, 'error'); }
+    });
+
+    element.followCoordinates.checked = followCoordinatesEnabled;
+    element.followCoordinates.addEventListener('change', () => {
+      followCoordinatesEnabled = element.followCoordinates.checked;
+      localStorage.setItem('c6TrackerFollowCoordinates', followCoordinatesEnabled ? '1' : '0');
+      if (followCoordinatesEnabled && mapTrackPoints.length && ensureMap()) {
+        const point = mapTrackPoints[mapTrackPoints.length - 1];
+        trackMap.setView([point.lat, point.lon], 15);
+      }
+    });
+
+    element.refreshTracksButton.addEventListener('click', async () => {
+      try { await requestTrackList(); } catch (error) { setLog(error.message, 'error'); }
+    });
+
+    element.cancelTrackLoadButton.addEventListener('click', async () => {
+      mapLoading = false;
+      try { await writeRawCommand('cancel'); } catch (error) { setLog(error.message, 'error'); }
+      element.mapStatus.textContent = 'Загрузка отменена.';
+    });
+
+    element.downloadTrackButton.addEventListener('click', downloadLoadedTrack);
+    element.downloadGpxButton.addEventListener('click', downloadLoadedGpx);
+    element.baseMapSelect.addEventListener('change', () => { ensureMap(); setBaseMap(element.baseMapSelect.value); });
+    [element.showTrackLine, element.showTrackPoints, element.showTrackMarks, element.showBadHdop]
+      .forEach(control => control.addEventListener('change', applyMapVisibility));
+    element.routeImportFile.addEventListener('change', async () => {
+      const file = element.routeImportFile.files?.[0];
+      if (!file) return;
+      try {
+        const points = parseReferenceRoute(await file.text(), file.name);
+        if (points.length < 2) throw new Error('В файле нет маршрута минимум из двух точек');
+        await setReferenceRoute(points, true);
+        setLog(`Маршрут загружен: ${points.length} точек.`, 'ok');
+      } catch (error) { setLog(`Импорт маршрута: ${error.message}`, 'error'); }
+      element.routeImportFile.value = '';
+    });
+    element.clearRouteButton.addEventListener('click', () => setReferenceRoute([], false));
+    element.resetPeriodButton.addEventListener('click', () => {
+      periodState = { startedAt: Date.now(), distanceKm: 0, lastPoint: mapTrackPoints.at(-1) || null };
+      localStorage.setItem(PERIOD_KEY, JSON.stringify(periodState));
+      updateRouteCounters();
+    });
+
+    element.profileSelect.addEventListener('change', () => { element.deleteProfileButton.disabled = !element.profileSelect.value.startsWith('custom:'); });
+    element.applyProfileButton.addEventListener('click', () => {
+      const profile = chosenProfile();
+      if (profile) { applySettingsForm(profile); saveSettingsDraft(readSettingsForm(), true); }
+    });
+    element.saveProfileButton.addEventListener('click', () => {
+      const name = (prompt('Название профиля:', '') || '').trim();
+      if (!name) return;
+      const profiles = customProfiles(); profiles[name] = readSettingsForm();
+      localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles));
+      renderProfiles(`custom:${name}`);
+    });
+    element.deleteProfileButton.addEventListener('click', () => {
+      if (!element.profileSelect.value.startsWith('custom:')) return;
+      const name = element.profileSelect.value.slice(7), profiles = customProfiles(); delete profiles[name];
+      localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles)); renderProfiles();
+    });
+
+    element.refreshJournalButton.addEventListener('click', async () => {
+      if (!state.connected) { setLog('Журнал можно обновить после пробуждения устройства.', 'error'); return; }
+      journalLoading = true; await writeRawCommand('logs');
+    });
+    element.downloadJournalButton.addEventListener('click', () => downloadBlob(journalText, 'c6_tracker_service.csv', 'text/csv;charset=utf-8'));
+    element.deleteCachedTrackButton.addEventListener('click', async () => {
+      if (!element.cacheTrackSelect.value || !confirm('Удалить локальную копию выбранного трека?')) return;
+      await cacheDelete(element.cacheTrackSelect.value); await refreshStorageInfo();
+    });
+    element.stripCachedTrackButton.addEventListener('click', async () => {
+      const key = element.cacheTrackSelect.value, cached = key && await cacheGet(key); if (!cached) return;
+      await cacheSet(key, { route: cached.route, current: cached.current, updated: cached.updated,
+        archived: true, pointCount: cached.trackPoints?.length || 0, markCount: cached.userPoints?.length || 0 });
+      await refreshStorageInfo();
+    });
+    element.cleanStaleTracksButton.addEventListener('click', async () => {
+      if (!confirm('Удалить локальные треки, которых нет в текущем списке SD?')) return;
+      const keep = new Set(availableTracks.map(track => `mapTrack:${track.route}`));
+      for (const key of await cacheKeys()) if (String(key).startsWith('mapTrack:') && !keep.has(key)) await cacheDelete(key);
+      await refreshStorageInfo();
+    });
+    element.deleteBatteryButton.addEventListener('click', async () => {
+      if (!confirm('Удалить локальную историю батареи?')) return;
+      batterySamples = []; const cached = await cacheGet('compactHistory') || {};
+      await cacheSet('compactHistory', { ...cached, batterySamples: [], meta: { ...(cached.meta || {}), batterySequence: 0 } });
+      scheduleCharts(false, true); await refreshStorageInfo();
+    });
+    element.persistStorageButton.addEventListener('click', async () => {
+      if (navigator.storage?.persist) await navigator.storage.persist();
+      await refreshStorageInfo();
+    });
+
+    element.fullscreenMapButton.addEventListener('click', async () => {
+      try {
+        if (document.fullscreenElement === element.mapShell) await document.exitFullscreen();
+        else await element.mapShell.requestFullscreen();
+      } catch (error) {
+        setLog(`Полноэкранный режим недоступен: ${error.message}`, 'error');
+      }
+    });
+
+    document.addEventListener('fullscreenchange', () => {
+      const active = document.fullscreenElement === element.mapShell;
+      element.fullscreenMapButton.textContent = active ? 'Выйти' : 'На весь экран';
+      setTimeout(() => trackMap?.invalidateSize(), 50);
+    });
+
+    element.trackList.addEventListener('click', async event => {
+      const button = event.target.closest('[data-load-route]');
+      const renameButton = event.target.closest('[data-rename-route]');
+      const deleteButton = event.target.closest('[data-delete-route]');
+      try {
+        if (button) {
+          const route = Number(button.dataset.loadRoute);
+          if (!route) return;
+          const cached = await showCachedMapTrack(route);
+          const track = availableTracks.find(item => item.route === route);
+          const cachedTrack = await cacheGet(`mapTrack:${route}`);
+          const staleCurrent = Boolean(track?.current && track.updated && track.updated > (cachedTrack?.updated || 0));
+          if (!cached || staleCurrent) {
+            if (!state.connected) {
+              if (!cached) element.mapStatus.textContent = 'Трек не закэширован. Дождитесь подключения устройства.';
+              return;
+            }
+            mapLoading = true;
+            if (cached && staleCurrent) {
+              element.mapStatus.textContent = `Синхронизация новых записей трека ${String(route).padStart(3, '0')}…`;
+              await writeRawCommand(`sync=${route}|${cachedTrack.trackPoints?.length || 0}|${cachedTrack.userPoints?.length || 0}`);
+            } else {
+              element.mapStatus.textContent = `Запрос трека ${String(route).padStart(3, '0')}…`;
+              await writeRawCommand(`load=${route}`);
+            }
+          }
+        } else if (renameButton) {
+          const route = Number(renameButton.dataset.renameRoute);
+          const name = limitUtf8((prompt('Название трека:', '') ?? '').replace(/[|\r\n]/g, ' ').trim(), 15);
+          if (!name) return;
+          await writeRawCommand(`rename=${route}|${name}`);
+          await new Promise(resolve => setTimeout(resolve, 150));
+          await requestTrackList();
+        } else if (deleteButton) {
+          const route = Number(deleteButton.dataset.deleteRoute);
+          if (!confirm(`Удалить track_${String(route).padStart(3, '0')}.geojsonl?`)) return;
+          await writeRawCommand(`delete=${route}`);
+          await new Promise(resolve => setTimeout(resolve, 150));
+          await requestTrackList();
+        }
+      } catch (error) { mapLoading = false; setLog(error.message, 'error'); }
+    });
+
+    element.settingsForm.addEventListener('submit', async event => {
+      event.preventDefault();
+      const values = readSettingsForm();
+      const validationError = settingsError(values);
+      if (validationError) { setLog(validationError, 'error'); return; }
+      saveSettingsDraft(values, true);
+      if (!state.connected) {
+        setLog('Настройки сохранены локально и будут отправлены при подключении.', 'ok');
+        return;
+      }
+      try { await flushPendingSettings(); }
+      catch (error) { setLog(`Настройки остались в очереди: ${error.message}`, 'error'); }
+    });
+
+    async function initializePage() {
+      renderProfiles();
+      try { periodState = JSON.parse(localStorage.getItem(PERIOD_KEY) || 'null') || periodState; } catch {}
+      const draft = getSettingsDraft();
+      if (draft?.values) {
+        applySettingsForm(draft.values);
+        saveSettingsDraft(draft.values, Boolean(draft.dirty));
+      }
+      savePendingMarks(getPendingMarks());
+      restoreTelemetryCache();
+      const cachedHistory = await cacheGet('compactHistory');
+      if (cachedHistory) {
+        trackPoints = Array.isArray(cachedHistory.trackPoints) ? cachedHistory.trackPoints.slice(-100) : [];
+        userPoints = Array.isArray(cachedHistory.userPoints) ? cachedHistory.userPoints.slice(-100) : [];
+        batterySamples = Array.isArray(cachedHistory.batterySamples)
+          ? cachedHistory.batterySamples.map((sample, index) => typeof sample === 'number'
+            ? { id: index + 1, voltage: sample, legacy: true } : sample).slice(-1000) : [];
+        compactCacheMeta = cachedHistory.meta || compactCacheMeta;
+      }
+      const cachedTracks = await cacheGet('trackList');
+      if (Array.isArray(cachedTracks)) {
+        availableTracks = cachedTracks;
+        renderTrackList();
+      }
+      const cachedRoute = await cacheGet('referenceRoute');
+      if (Array.isArray(cachedRoute) && cachedRoute.length) await setReferenceRoute(cachedRoute, false);
+      const cachedLog = await cacheGet('serviceLog');
+      if (cachedLog?.text) { journalText = cachedLog.text; renderJournal(); }
+      setControls(false);
+      scheduleCharts(true, true);
+      if (!navigator.bluetooth) {
+        element.connectButton.disabled = true;
+        element.connectionText.textContent = 'Web Bluetooth недоступен';
+        setLog('Кэш доступен. Для подключения откройте HTML в Chrome с Web Bluetooth.', 'error');
+      } else {
+        restoreKnownDevice();
+      }
+    }
+
+    setInterval(updateRouteCounters, 1000);
+
+    if ('ResizeObserver' in window) {
+      const chartObserver = new ResizeObserver(() => scheduleCharts(true, true));
+      chartObserver.observe(element.trackCanvas);
+      chartObserver.observe(element.batteryCanvas);
+    } else {
+      window.addEventListener('resize', () => scheduleCharts(true, true));
+    }
+    initializePage();
+  </script>
+</body>
+</html>

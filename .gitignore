@@ -1,0 +1,14 @@
+.pio/
+build/
+build_ble/
+build_baseline/
+
+*.bin
+*.elf
+*.map
+*.zip
+
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
